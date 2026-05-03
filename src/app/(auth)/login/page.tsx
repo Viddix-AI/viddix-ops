@@ -22,29 +22,47 @@ function LoginInner() {
   const search = useSearchParams()
   const next = search.get("next") ?? "/dashboard"
 
+  const [mode, setMode] = React.useState<"signin" | "signup">("signin")
   const [email, setEmail] = React.useState("")
   const [password, setPassword] = React.useState("")
+  const [fullName, setFullName] = React.useState("")
   const [busy, setBusy] = React.useState(false)
+
+  const supabaseConfigured =
+    !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setBusy(true)
     try {
       // No Supabase env? Skip auth, jump straight in — useful for local demos.
-      if (
-        !process.env.NEXT_PUBLIC_SUPABASE_URL ||
-        !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      ) {
+      if (!supabaseConfigured) {
         router.push(next)
         return
       }
       const supabase = createClient()
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) throw error
+      if (mode === "signin") {
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        if (error) throw error
+      } else {
+        // Sign up. handle_new_user trigger in 001_init.sql will create a
+        // matching public.profiles row for us.
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+            data: { full_name: fullName.trim() || email.split("@")[0] },
+          },
+        })
+        if (error) throw error
+        toast.success("Account created. Check your inbox to confirm your email.")
+      }
       router.push(next)
       router.refresh()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Sign-in failed")
+      toast.error(err instanceof Error ? err.message : "Auth failed")
     } finally {
       setBusy(false)
     }
@@ -67,13 +85,28 @@ function LoginInner() {
           </Link>
 
           <h1 className="font-heading text-2xl font-semibold tracking-tight">
-            Welcome back
+            {mode === "signin" ? "Welcome back" : "Create your workspace"}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Sign in to your Viddix workspace.
+            {mode === "signin"
+              ? "Sign in to your Viddix workspace."
+              : "Set up an account for the Viddix CRM."}
           </p>
 
           <form onSubmit={onSubmit} className="mt-8 space-y-4">
+            {mode === "signup" && (
+              <label className="block space-y-1.5">
+                <span className="text-xs font-medium text-foreground/80">Full name</span>
+                <Input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Pablo Martin"
+                  className="h-10"
+                  required
+                />
+              </label>
+            )}
             <label className="block space-y-1.5">
               <span className="text-xs font-medium text-foreground/80">Email</span>
               <Input
@@ -95,6 +128,7 @@ function LoginInner() {
                 placeholder="••••••••"
                 className="h-10"
                 required
+                minLength={mode === "signup" ? 8 : undefined}
               />
             </label>
 
@@ -103,13 +137,26 @@ function LoginInner() {
               className="h-10 w-full"
               disabled={busy}
             >
-              {busy ? "Signing in…" : "Sign in"}
+              {busy
+                ? mode === "signin" ? "Signing in…" : "Creating account…"
+                : mode === "signin" ? "Sign in" : "Create account"}
             </Button>
           </form>
 
+          <button
+            type="button"
+            onClick={() => setMode((m) => (m === "signin" ? "signup" : "signin"))}
+            className="mt-4 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            {mode === "signin"
+              ? "Need an account? Create one →"
+              : "Already have an account? Sign in →"}
+          </button>
+
           <p className="mt-6 text-xs text-muted-foreground">
-            Internal access only. Reach out to Pablo Martin for a workspace
-            invite.
+            {supabaseConfigured
+              ? "Internal workspace. Email confirmation may be required after signup."
+              : "Demo mode — no auth backend configured. Any submit signs you in."}
           </p>
         </div>
       </div>

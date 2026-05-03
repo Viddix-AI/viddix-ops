@@ -22,13 +22,20 @@ import {
 } from "@/components/ui/sheet"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs"
-import { PriorityBadge } from "@/components/dashboard/priority-badge"
-import { TaskStatusBadge } from "@/components/dashboard/status-badge"
+import { EditableTaskRow } from "@/components/dashboard/editable-task-row"
+import { TeamBadge } from "@/components/dashboard/team-badge"
 import { useCreateNote, useNotesFor } from "@/hooks/use-notes"
 import { useCreateTask, useTasks } from "@/hooks/use-tasks"
 import { useProfiles, useCurrentProfile } from "@/hooks/use-profile"
 import { money, relativeDay } from "@/lib/format"
-import { LEAD_STAGES, type Lead, type LeadStage } from "@/lib/types"
+import {
+  LEAD_STAGES,
+  LEAD_TEMPERATURES,
+  type Lead,
+  type LeadStage,
+  type LeadTemperature,
+} from "@/lib/types"
+import { cn } from "@/lib/utils"
 
 export function LeadDetailSheet({
   lead,
@@ -75,6 +82,7 @@ function Inner({
   const leadTasks = tasks.filter((t) => t.lead_id === lead.id)
   const [noteText, setNoteText] = React.useState("")
   const [taskTitle, setTaskTitle] = React.useState("")
+  const [taskDue, setTaskDue] = React.useState("")
 
   return (
     <>
@@ -89,9 +97,19 @@ function Inner({
             )}
           </div>
           <div className="flex items-center gap-1.5">
-            <Button size="sm" variant="outline" onClick={onConvert}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onConvert}
+              disabled={!!lead.converted_client_id}
+              title={
+                lead.converted_client_id
+                  ? "Already converted to a client"
+                  : "Convert this lead to a client"
+              }
+            >
               <ArrowRight />
-              Convert
+              {lead.converted_client_id ? "Converted" : "Convert"}
             </Button>
             <Button size="icon-sm" variant="ghost" onClick={onDelete} aria-label="Delete">
               <Trash2 />
@@ -127,7 +145,12 @@ function Inner({
               </SelectTrigger>
               <SelectContent>
                 {profiles.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>{p.full_name}</SelectItem>
+                  <SelectItem key={p.id} value={p.id}>
+                    <span className="inline-flex items-center gap-1.5">
+                      {p.full_name}
+                      <TeamBadge team={p.team} />
+                    </span>
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -143,6 +166,40 @@ function Inner({
               type="number"
               defaultValue={String(lead.value ?? 0)}
               onBlur={(e) => onUpdate({ value: Number(e.target.value) || 0 })}
+            />
+          </Field>
+        </div>
+
+        <div className="mt-3 space-y-3">
+          <Field label="Temperature">
+            <div className="flex gap-1.5">
+              {LEAD_TEMPERATURES.map((t) => {
+                const active = lead.temperature === t.id
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => onUpdate({ temperature: t.id as LeadTemperature })}
+                    className={cn(
+                      "inline-flex flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
+                      active
+                        ? "border-foreground bg-foreground text-background"
+                        : "border-border bg-background text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <span className={cn("size-2 rounded-full", t.dot)} />
+                    {t.label}
+                  </button>
+                )
+              })}
+            </div>
+          </Field>
+          <Field label="Lead notes">
+            <Textarea
+              defaultValue={lead.notes ?? ""}
+              onBlur={(e) => onUpdate({ notes: e.target.value || null })}
+              rows={2}
+              placeholder="Anything to remember about this lead…"
             />
           </Field>
         </div>
@@ -210,50 +267,51 @@ function Inner({
           </TabsPrimitive.Panel>
 
           <TabsPrimitive.Panel value="tasks" className="mt-3 space-y-3">
-            <div className="flex gap-2">
+            <div className="space-y-2 rounded-md border border-border bg-background p-2.5">
               <Input
                 value={taskTitle}
                 onChange={(e) => setTaskTitle(e.target.value)}
                 placeholder="New task — e.g. send proposal"
                 className="h-8"
               />
-              <Button
-                size="sm"
-                disabled={!taskTitle.trim()}
-                onClick={() =>
-                  createTask.mutate(
-                    {
-                      title: taskTitle.trim(),
-                      lead_id: lead.id,
-                      assignee_id: lead.owner_id ?? me.id,
-                    },
-                    {
-                      onSuccess: () => {
-                        setTaskTitle("")
-                        toast.success("Task added")
+              <div className="flex items-center gap-2">
+                <Input
+                  type="date"
+                  value={taskDue}
+                  onChange={(e) => setTaskDue(e.target.value)}
+                  className="h-8 flex-1"
+                />
+                <Button
+                  size="sm"
+                  disabled={!taskTitle.trim()}
+                  onClick={() =>
+                    createTask.mutate(
+                      {
+                        title: taskTitle.trim(),
+                        lead_id: lead.id,
+                        assignee_id: lead.owner_id ?? me.id,
+                        due_date: taskDue || null,
                       },
-                    }
-                  )
-                }
-              >
-                <Plus /> Add
-              </Button>
+                      {
+                        onSuccess: () => {
+                          setTaskTitle("")
+                          setTaskDue("")
+                          toast.success("Task added")
+                        },
+                      }
+                    )
+                  }
+                >
+                  <Plus /> Add
+                </Button>
+              </div>
             </div>
             {leadTasks.length === 0 ? (
               <p className="py-4 text-center text-xs text-muted-foreground">No tasks yet</p>
             ) : (
               <ul className="space-y-2">
                 {leadTasks.map((t) => (
-                  <li key={t.id} className="rounded-md border border-border bg-background p-3 text-sm">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="font-medium">{t.title}</p>
-                      <PriorityBadge priority={t.priority} />
-                    </div>
-                    <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                      <TaskStatusBadge status={t.status} />
-                      <span>{relativeDay(t.due_date)}</span>
-                    </div>
-                  </li>
+                  <EditableTaskRow key={t.id} task={t} />
                 ))}
               </ul>
             )}

@@ -12,7 +12,7 @@ export function useLeads() {
   return useQuery({
     queryKey: KEY,
     queryFn: async () => store.leads(),
-    initialData: SEED_LEADS,
+    placeholderData: SEED_LEADS,
   })
 }
 

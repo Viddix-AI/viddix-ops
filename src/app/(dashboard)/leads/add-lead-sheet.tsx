@@ -20,7 +20,13 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { useCreateLead } from "@/hooks/use-leads"
-import { LEAD_STAGES, type LeadStage } from "@/lib/types"
+import {
+  LEAD_STAGES,
+  LEAD_TEMPERATURES,
+  type LeadStage,
+  type LeadTemperature,
+} from "@/lib/types"
+import { cn } from "@/lib/utils"
 
 const SOURCES = [
   { value: "referral", label: "Referral" },
@@ -37,6 +43,7 @@ type Form = {
   phone: string
   source: string
   stage: LeadStage
+  temperature: LeadTemperature
   value: string
   notes: string
 }
@@ -48,6 +55,7 @@ const EMPTY: Form = {
   phone: "",
   source: "",
   stage: "new",
+  temperature: "warm",
   value: "",
   notes: "",
 }
@@ -82,6 +90,7 @@ export function AddLeadSheet({
         phone: form.phone.trim() || null,
         source: form.source || null,
         stage: form.stage,
+        temperature: form.temperature,
         value: Number(form.value) || 0,
         notes: form.notes.trim() || null,
       },
@@ -170,6 +179,29 @@ export function AddLeadSheet({
                 </Select>
               </Field>
             </div>
+            <Field label="Temperature">
+              <div className="flex gap-1.5">
+                {LEAD_TEMPERATURES.map((t) => {
+                  const active = form.temperature === t.id
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => set("temperature", t.id)}
+                      className={cn(
+                        "inline-flex flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors",
+                        active
+                          ? "border-foreground bg-foreground text-background"
+                          : "border-border bg-background text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <span className={cn("size-2 rounded-full", t.dot)} />
+                      {t.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </Field>
             <Field label="Value ($)">
               <Input
                 type="number"

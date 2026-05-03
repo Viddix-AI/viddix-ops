@@ -9,14 +9,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { PriorityBadge } from "@/components/dashboard/priority-badge"
 import { TaskStatusBadge } from "@/components/dashboard/status-badge"
+import { UserAvatar } from "@/components/dashboard/user-avatar"
 import { useTasks, useUpdateTask } from "@/hooks/use-tasks"
 import { useProfiles } from "@/hooks/use-profile"
-import { initials, relativeDay } from "@/lib/format"
+import { relativeDay } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import type { Task, TaskPriority } from "@/lib/types"
+import { TEAMS, type Task, type TaskPriority, type Team } from "@/lib/types"
+import { TeamBadge } from "@/components/dashboard/team-badge"
 
 const PRIORITIES: { value: TaskPriority; label: string }[] = [
   { value: "low", label: "Low" },
@@ -41,6 +42,7 @@ export function TasksView() {
 
   const [filterAssignee, setFilterAssignee] = React.useState("")
   const [filterPriority, setFilterPriority] = React.useState<TaskPriority | "">("")
+  const [filterTeam, setFilterTeam] = React.useState<Team | "">("")
 
   const { todayMs, weekEndMs } = React.useMemo(() => {
     const d = new Date()
@@ -63,6 +65,10 @@ export function TasksView() {
   const filtered = tasks.filter((t) => {
     if (filterAssignee && t.assignee_id !== filterAssignee) return false
     if (filterPriority && t.priority !== filterPriority) return false
+    if (filterTeam) {
+      const owner = profiles.find((p) => p.id === t.assignee_id)
+      if (owner?.team !== filterTeam) return false
+    }
     return true
   })
 
@@ -92,7 +98,26 @@ export function TasksView() {
             <SelectItem value="">All assignees</SelectItem>
             {profiles.map((p) => (
               <SelectItem key={p.id} value={p.id}>
-                {p.full_name}
+                <span className="inline-flex items-center gap-1.5">
+                  {p.full_name}
+                  <TeamBadge team={p.team} />
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={filterTeam}
+          onValueChange={(v) => setFilterTeam((v ?? "") as Team | "")}
+        >
+          <SelectTrigger size="sm">
+            <SelectValue placeholder="All teams" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">All teams</SelectItem>
+            {TEAMS.map((t) => (
+              <SelectItem key={t.id} value={t.id}>
+                {t.label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -151,19 +176,7 @@ export function TasksView() {
                       <PriorityBadge priority={task.priority} />
                       <TaskStatusBadge status={task.status} />
                     </div>
-                    {assignee ? (
-                      <Avatar size="sm" title={assignee.full_name}>
-                        {assignee.avatar_url && (
-                          <AvatarImage
-                            src={assignee.avatar_url}
-                            alt={assignee.full_name}
-                          />
-                        )}
-                        <AvatarFallback>{initials(assignee.full_name)}</AvatarFallback>
-                      </Avatar>
-                    ) : (
-                      <div className="size-6 shrink-0 rounded-full bg-muted" />
-                    )}
+                    <UserAvatar profile={assignee ?? null} size="sm" />
                     <span className="w-16 shrink-0 text-right text-[11px] text-muted-foreground">
                       {relativeDay(task.due_date)}
                     </span>

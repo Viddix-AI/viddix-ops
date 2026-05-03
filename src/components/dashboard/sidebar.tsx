@@ -1,15 +1,17 @@
 "use client"
 
+import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
 import { cn } from "@/lib/utils"
 import {
+  Activity as ActivityIcon,
   Home,
-  Users,
   Briefcase,
-  CheckSquare,
   Calendar,
+  CheckSquare,
+  Handshake,
   Sparkles,
 } from "lucide-react"
 
@@ -17,8 +19,10 @@ export const NAV_ITEMS = [
   { href: "/dashboard",  label: "Dashboard", icon: Home },
   { href: "/leads",      label: "Leads",     icon: Sparkles },
   { href: "/clients",    label: "Clients",   icon: Briefcase },
+  { href: "/partners",   label: "Partners",  icon: Handshake },
   { href: "/tasks",      label: "Tasks",     icon: CheckSquare },
   { href: "/calendar",   label: "Calendar",  icon: Calendar },
+  { href: "/activity",   label: "Activity",  icon: ActivityIcon },
 ] as const
 
 export function Sidebar() {
@@ -69,14 +73,42 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-sidebar-border p-3">
-        <Link
-          href="/dashboard"
-          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-sidebar-foreground/60 hover:text-white"
-        >
-          <span className="size-1.5 rounded-full bg-emerald-400" />
-          All systems normal
-        </Link>
+        <StorageStatus />
       </div>
     </aside>
+  )
+}
+
+function StorageStatus() {
+  // Show whether the localStorage-backed store is healthy. Using the
+  // store-info-from-previous-renders pattern (instead of useEffect) keeps the
+  // probe SSR-safe — first render reports "checking", a subsequent client
+  // render flips it to ok/down based on a tiny round-trip.
+  const [status, setStatus] = React.useState<"checking" | "ok" | "down">("checking")
+  const [checked, setChecked] = React.useState(false)
+  if (!checked && typeof window !== "undefined") {
+    setChecked(true)
+    try {
+      const probe = "__viddix_health__"
+      window.localStorage.setItem(probe, "1")
+      window.localStorage.removeItem(probe)
+      setStatus("ok")
+    } catch {
+      setStatus("down")
+    }
+  }
+  const tone =
+    status === "ok" ? "bg-emerald-400" : status === "down" ? "bg-rose-400" : "bg-amber-400"
+  const label =
+    status === "ok"
+      ? "Local store ready"
+      : status === "down"
+      ? "Local store unavailable"
+      : "Checking storage…"
+  return (
+    <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-sidebar-foreground/60">
+      <span className={cn("size-1.5 rounded-full", tone)} />
+      {label}
+    </div>
   )
 }

@@ -12,7 +12,7 @@ export function useTasks() {
   return useQuery({
     queryKey: KEY,
     queryFn: async () => store.tasks(),
-    initialData: SEED_TASKS,
+    placeholderData: SEED_TASKS,
   })
 }
 

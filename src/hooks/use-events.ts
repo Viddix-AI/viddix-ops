@@ -12,7 +12,7 @@ export function useEvents() {
   return useQuery({
     queryKey: KEY,
     queryFn: async () => store.events(),
-    initialData: SEED_EVENTS,
+    placeholderData: SEED_EVENTS,
   })
 }
 
