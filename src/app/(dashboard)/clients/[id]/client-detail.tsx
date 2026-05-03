@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ArrowLeft, Mail, Phone, Globe, Plus } from "lucide-react"
+import { ArrowLeft, Mail, Phone, Globe, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -18,18 +18,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { EditableTaskRow } from "@/components/dashboard/editable-task-row"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { PageHeader } from "@/components/dashboard/page-header"
-import { PriorityBadge } from "@/components/dashboard/priority-badge"
-import { ClientStatusBadge, TaskStatusBadge } from "@/components/dashboard/status-badge"
+import { ClientStatusBadge } from "@/components/dashboard/status-badge"
 import { UserAvatar } from "@/components/dashboard/user-avatar"
 import { useClient, useUpdateClient } from "@/hooks/use-clients"
 import { useEvents } from "@/hooks/use-events"
 import { useCreateNote, useNotesFor } from "@/hooks/use-notes"
+import {
+  useAttachPartner,
+  useDetachPartner,
+  usePartners,
+  usePartnersForClient,
+  useUpdateClientPartner,
+} from "@/hooks/use-partners"
 import { useCurrentProfile, useProfiles } from "@/hooks/use-profile"
 import { useCreateTask, useTasks } from "@/hooks/use-tasks"
 import { money, relativeDay } from "@/lib/format"
-import type { Client, ClientStatus } from "@/lib/types"
+import type { ClientStatus } from "@/lib/types"
 
 export function ClientDetail({ id }: { id: string }) {
   const { data: client } = useClient(id)
@@ -39,9 +46,6 @@ export function ClientDetail({ id }: { id: string }) {
   const { data: tasks = [] } = useTasks()
   const { data: events = [] } = useEvents()
   const { data: notes = [] } = useNotesFor({ clientId: id })
-
-  const createTask = useCreateTask()
-  const createNote = useCreateNote()
 
   if (!client) {
     return (
@@ -181,6 +185,7 @@ export function ClientDetail({ id }: { id: string }) {
             <TabsTrigger value="tasks">Tasks · {clientTasks.length}</TabsTrigger>
             <TabsTrigger value="notes">Notes · {notes.length}</TabsTrigger>
             <TabsTrigger value="events">Events · {clientEvents.length}</TabsTrigger>
+            <TabsTrigger value="partners">Partners</TabsTrigger>
           </TabsList>
 
           <TabsPrimitive.Panel value="tasks" className="mt-4">
@@ -195,6 +200,9 @@ export function ClientDetail({ id }: { id: string }) {
           </TabsPrimitive.Panel>
           <TabsPrimitive.Panel value="events" className="mt-4">
             <EventsTab events={clientEvents} />
+          </TabsPrimitive.Panel>
+          <TabsPrimitive.Panel value="partners" className="mt-4">
+            <PartnersTab clientId={client.id} mrr={Number(client.mrr || 0)} />
           </TabsPrimitive.Panel>
         </Tabs>
       </div>
@@ -244,45 +252,53 @@ function TasksTab({
 }) {
   const create = useCreateTask()
   const [title, setTitle] = React.useState("")
+  const [due, setDue] = React.useState("")
   return (
     <Card>
       <CardContent className="space-y-3 py-2">
-        <div className="flex gap-2">
+        <div className="space-y-2 rounded-md border border-border bg-background p-2.5">
           <Input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="New task — what needs to happen?"
             className="h-9"
           />
-          <Button
-            disabled={!title.trim()}
-            onClick={() =>
-              create.mutate(
-                { title: title.trim(), client_id: clientId, assignee_id: ownerId },
-                {
-                  onSuccess: () => {
-                    setTitle("")
-                    toast.success("Task added")
+          <div className="flex items-center gap-2">
+            <Input
+              type="date"
+              value={due}
+              onChange={(e) => setDue(e.target.value)}
+              className="h-9 flex-1"
+            />
+            <Button
+              disabled={!title.trim()}
+              onClick={() =>
+                create.mutate(
+                  {
+                    title: title.trim(),
+                    client_id: clientId,
+                    assignee_id: ownerId,
+                    due_date: due || null,
                   },
-                }
-              )
-            }
-          >
-            <Plus />
-            Add
-          </Button>
+                  {
+                    onSuccess: () => {
+                      setTitle("")
+                      setDue("")
+                      toast.success("Task added")
+                    },
+                  }
+                )
+              }
+            >
+              <Plus />
+              Add
+            </Button>
+          </div>
         </div>
         {tasks && tasks.length > 0 ? (
-          <ul className="divide-y divide-border">
+          <ul className="space-y-2">
             {tasks.map((t) => (
-              <li key={t.id} className="flex items-center gap-3 py-2.5">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{t.title}</p>
-                  <p className="text-xs text-muted-foreground">{relativeDay(t.due_date)}</p>
-                </div>
-                <PriorityBadge priority={t.priority} />
-                <TaskStatusBadge status={t.status} />
-              </li>
+              <EditableTaskRow key={t.id} task={t} />
             ))}
           </ul>
         ) : (
@@ -350,6 +366,169 @@ function NotesTab({ clientId }: { clientId: string }) {
         )}
       </CardContent>
     </Card>
+  )
+}
+
+function PartnersTab({ clientId, mrr }: { clientId: string; mrr: number }) {
+  const { data: allPartners = [] } = usePartners()
+  const { data: links = [] } = usePartnersForClient(clientId)
+  const attach = useAttachPartner()
+  const updateLink = useUpdateClientPartner()
+  const detach = useDetachPartner()
+
+  const linkedIds = new Set(links.map((l) => l.partner_id))
+  const available = allPartners.filter((p) => !linkedIds.has(p.id))
+
+  const totalSplit = links.reduce((s, l) => s + l.split_pct, 0)
+  const totalAllocated = links.reduce((s, l) => s + (mrr * l.split_pct) / 100, 0)
+  const remaining = Math.max(0, 100 - totalSplit)
+  const houseShare = (mrr * remaining) / 100
+
+  return (
+    <Card>
+      <CardContent className="space-y-4 py-3">
+        <div className="grid grid-cols-3 gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm">
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Allocated</p>
+            <p className="font-heading text-base font-semibold tabular-nums">{totalSplit}%</p>
+            <p className="text-xs text-muted-foreground">{money(totalAllocated)}/mo</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">House share</p>
+            <p className="font-heading text-base font-semibold tabular-nums">{remaining}%</p>
+            <p className="text-xs text-muted-foreground">{money(houseShare)}/mo</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Client MRR</p>
+            <p className="font-heading text-base font-semibold tabular-nums">{money(mrr)}</p>
+            <p className="text-xs text-muted-foreground">/mo</p>
+          </div>
+        </div>
+
+        {totalSplit > 100 && (
+          <p className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+            Splits exceed 100% — adjust before paying out.
+          </p>
+        )}
+
+        <div className="flex items-center gap-2">
+          <Select
+            value=""
+            onValueChange={(v) => {
+              if (!v) return
+              attach.mutate(
+                { client_id: clientId, partner_id: v },
+                { onSuccess: () => toast.success("Partner attached") }
+              )
+            }}
+            disabled={available.length === 0}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue
+                placeholder={
+                  available.length === 0
+                    ? "All partners already attached"
+                    : "Attach partner…"
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {available.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name} · {p.default_split_pct}% default
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Link
+            href="/partners"
+            className="shrink-0 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+          >
+            Manage
+          </Link>
+        </div>
+
+        {links.length === 0 ? (
+          <EmptyState
+            title="No partners attached"
+            description="Attach a partner to allocate a share of this client's MRR."
+          />
+        ) : (
+          <ul className="divide-y divide-border rounded-md border border-border">
+            {links.map((l) => (
+              <li
+                key={l.id}
+                className="flex flex-wrap items-center gap-3 px-3 py-2.5 text-sm"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">{l.partner?.name ?? "—"}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {l.partner?.role ?? "Partner"}
+                  </p>
+                </div>
+                <SplitInput
+                  value={l.split_pct}
+                  onSave={(pct) =>
+                    updateLink.mutate({ id: l.id, patch: { split_pct: pct } })
+                  }
+                />
+                <span className="w-20 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                  {money((mrr * l.split_pct) / 100)}/mo
+                </span>
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label="Detach"
+                  onClick={() =>
+                    detach.mutate(l.id, {
+                      onSuccess: () => toast.success("Partner detached"),
+                    })
+                  }
+                >
+                  <Trash2 />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function SplitInput({
+  value,
+  onSave,
+}: {
+  value: number
+  onSave: (pct: number) => void
+}) {
+  // Re-sync local edit buffer when the upstream `value` changes (after a save
+  // round-trips through the store). The "store-info-from-previous-renders"
+  // pattern avoids the cascading-render warning from setting state in effect.
+  const [prev, setPrev] = React.useState(value)
+  const [v, setV] = React.useState(String(value))
+  if (prev !== value) {
+    setPrev(value)
+    setV(String(value))
+  }
+  return (
+    <div className="flex items-center gap-1">
+      <Input
+        type="number"
+        min="0"
+        max="100"
+        value={v}
+        onChange={(e) => setV(e.target.value)}
+        onBlur={() => {
+          const n = Math.max(0, Math.min(100, Number(v) || 0))
+          if (n !== value) onSave(n)
+          setV(String(n))
+        }}
+        className="h-8 w-20"
+      />
+      <span className="text-xs text-muted-foreground">%</span>
+    </div>
   )
 }
 

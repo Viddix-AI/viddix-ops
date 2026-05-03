@@ -2,6 +2,7 @@ import * as React from "react"
 
 import { Sidebar } from "@/components/dashboard/sidebar"
 import { Topbar } from "@/components/dashboard/topbar"
+import { TaskRemindersClient } from "./task-reminders-client"
 
 export default function DashboardLayout({
   children,
@@ -15,6 +16,7 @@ export default function DashboardLayout({
         <Topbar />
         <main className="flex-1 min-w-0">{children}</main>
       </div>
+      <TaskRemindersClient />
     </div>
   )
 }

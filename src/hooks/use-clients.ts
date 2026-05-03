@@ -12,7 +12,7 @@ export function useClients() {
   return useQuery({
     queryKey: KEY,
     queryFn: async () => store.clients(),
-    initialData: SEED_CLIENTS,
+    placeholderData: SEED_CLIENTS,
   })
 }
 

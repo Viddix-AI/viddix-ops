@@ -2,10 +2,12 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
+import { useQueryClient } from "@tanstack/react-query"
 import { Search, Bell } from "lucide-react"
 import { toast } from "sonner"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { TeamBadge } from "./team-badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -17,6 +19,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useCurrentProfile } from "@/hooks/use-profile"
+import { ensureNotificationPermission } from "@/hooks/use-task-reminders"
+import { store } from "@/lib/data-store"
 import { initials } from "@/lib/format"
 import { createClient } from "@/lib/supabase/client"
 import { MobileNav } from "./mobile-nav"
@@ -24,6 +28,7 @@ import { MobileNav } from "./mobile-nav"
 export function Topbar() {
   const router = useRouter()
   const me = useCurrentProfile()
+  const qc = useQueryClient()
 
   async function signOut() {
     try {
@@ -37,6 +42,27 @@ export function Topbar() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Sign-out failed")
     }
+  }
+
+  async function enableNotifications() {
+    const result = await ensureNotificationPermission()
+    if (result === "granted") toast.success("Notifications enabled")
+    else if (result === "denied") toast.error("Notifications blocked. Allow them in your browser settings.")
+    else if (result === "unsupported") toast.error("This browser does not support notifications.")
+    else toast.message("Notification permission unchanged")
+  }
+
+  function resetDemoData() {
+    if (
+      !confirm(
+        "Reset all demo data? This wipes leads, clients, partners, tasks, notes and events stored in this browser."
+      )
+    ) {
+      return
+    }
+    store.reset()
+    qc.invalidateQueries()
+    toast.success("Demo data reset")
   }
 
   return (
@@ -68,15 +94,26 @@ export function Topbar() {
             <Avatar size="sm">
               <AvatarFallback>{initials(me.full_name)}</AvatarFallback>
             </Avatar>
-            <span className="hidden text-xs font-medium text-foreground sm:inline">
+            <span className="hidden items-center gap-1.5 text-xs font-medium text-foreground sm:inline-flex">
               {me.full_name}
+              <TeamBadge team={me.team} />
             </span>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>
-              <div className="font-medium">{me.full_name}</div>
+              <div className="flex items-center gap-1.5 font-medium">
+                {me.full_name}
+                <TeamBadge team={me.team} />
+              </div>
               <div className="text-xs text-muted-foreground">{me.email}</div>
             </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={enableNotifications}>
+              Enable task notifications
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={resetDemoData}>
+              Reset demo data
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={signOut} variant="destructive">
               Sign out
