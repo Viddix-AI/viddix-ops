@@ -234,7 +234,7 @@ export const TEAMS: {
 }[] = [
   {
     id: "madrid",
-    label: "Madrid · joint",
+    label: "Madrid",
     short: "MAD",
     badge: "bg-blue-100 text-blue-700",
     avatarTone: "bg-blue-100 text-blue-700",
@@ -242,7 +242,7 @@ export const TEAMS: {
   },
   {
     id: "us",
-    label: "US · solo",
+    label: "US",
     short: "US",
     badge: "bg-emerald-100 text-emerald-700",
     avatarTone: "bg-emerald-100 text-emerald-700",
