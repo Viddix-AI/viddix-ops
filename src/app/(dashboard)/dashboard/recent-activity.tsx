@@ -52,6 +52,7 @@ const ICON: Record<ActivityKind, { icon: LucideIcon; tone: PillTone }> = {
   lead_moved:       { icon: Move,        tone: "indigo" },
   client_created:   { icon: Briefcase,   tone: "emerald" },
   client_updated:   { icon: Pencil,      tone: "slate" },
+  client_deleted:   { icon: Trash2,      tone: "rose" },
   task_created:     { icon: CheckSquare, tone: "amber" },
   task_updated:     { icon: Pencil,      tone: "slate" },
   task_deleted:     { icon: Trash2,      tone: "rose" },

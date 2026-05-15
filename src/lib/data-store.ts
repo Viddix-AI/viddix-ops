@@ -362,6 +362,32 @@ const localStore = {
     return c
   },
 
+  deleteClient(id: string) {
+    const db = read()
+    const c = db.clients.find((x) => x.id === id)
+    if (!c) return
+    // Mirror the SQL cascades from 001_init.sql + 002_partners_temperature.sql:
+    //   client_partners ON DELETE CASCADE      → remove links
+    //   notes           ON DELETE CASCADE      → remove notes
+    //   tasks.client_id ON DELETE SET NULL     → null out the FK
+    //   events.client_id ON DELETE SET NULL    → null out the FK
+    //   leads.converted_client_id ON DELETE SET NULL → null out
+    db.clients = db.clients.filter((x) => x.id !== id)
+    db.client_partners = db.client_partners.filter((cp) => cp.client_id !== id)
+    db.notes = db.notes.filter((n) => n.client_id !== id)
+    db.tasks = db.tasks.map((t) =>
+      t.client_id === id ? { ...t, client_id: null } : t
+    )
+    db.events = db.events.map((e) =>
+      e.client_id === id ? { ...e, client_id: null } : e
+    )
+    db.leads = db.leads.map((l) =>
+      l.converted_client_id === id ? { ...l, converted_client_id: null } : l
+    )
+    record(db, "client_deleted", `${c.name} deleted`, { client_id: id })
+    write(db)
+  },
+
   // ── tasks ────────────────────────────────────────────────────────────────
   createTask(input: Partial<Task> & { title: string }): Task {
     const db = read()

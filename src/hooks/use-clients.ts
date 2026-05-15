@@ -44,3 +44,19 @@ export function useUpdateClient() {
     },
   })
 }
+
+export function useDeleteClient() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => store.deleteClient(id),
+    onSuccess: (_d, id) => {
+      qc.invalidateQueries({ queryKey: KEY })
+      qc.invalidateQueries({ queryKey: ["client", id] })
+      // Cascaded entities — invalidate to refresh tables that join through.
+      qc.invalidateQueries({ queryKey: ["client_partners"] })
+      qc.invalidateQueries({ queryKey: ["notes"] })
+      qc.invalidateQueries({ queryKey: ["tasks"] })
+      qc.invalidateQueries({ queryKey: ["events"] })
+    },
+  })
+}

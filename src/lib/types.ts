@@ -97,6 +97,7 @@ export type ActivityKind =
   | "lead_moved"
   | "client_created"
   | "client_updated"
+  | "client_deleted"
   | "task_created"
   | "task_updated"
   | "task_deleted"

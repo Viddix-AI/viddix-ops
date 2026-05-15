@@ -46,6 +46,7 @@ export interface Backend {
   // Clients
   createClient(input: Partial<Client> & { name: string }): Promise<Client>
   updateClient(id: string, patch: Partial<Client>):        Promise<Client | null>
+  deleteClient(id: string):                                Promise<void>
 
   // Tasks
   createTask(input: Partial<Task> & { title: string }): Promise<Task>

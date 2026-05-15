@@ -34,6 +34,7 @@ const ICONS: Record<ActivityKind, { icon: LucideIcon; tone: string }> = {
   lead_moved:       { icon: Move,      tone: "bg-indigo-100 text-indigo-700" },
   client_created:   { icon: Briefcase, tone: "bg-emerald-100 text-emerald-700" },
   client_updated:   { icon: Pencil,    tone: "bg-slate-100 text-slate-700" },
+  client_deleted:   { icon: Trash2,    tone: "bg-rose-100 text-rose-700" },
   task_created:     { icon: CheckSquare, tone: "bg-amber-100 text-amber-800" },
   task_updated:     { icon: Pencil,    tone: "bg-slate-100 text-slate-700" },
   task_deleted:     { icon: Trash2,    tone: "bg-rose-100 text-rose-700" },
