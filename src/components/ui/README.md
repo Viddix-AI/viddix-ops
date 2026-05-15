@@ -26,15 +26,28 @@ belong in this folder. Put it next to the route or under `components/dashboard/`
 | `Dialog` | Modal overlay (close on Esc, focus trap, portal-rendered) | shadcn (base-ui) |
 | `DropdownMenu` | Trigger + menu items + separators | shadcn (base-ui) |
 | `Input` | Single-line text input with focus-ring | shadcn |
-| `KPIStat` | **NEW (Fase 0)** dashboard KPI tile with label/value/sub/icon/trend/sparkline | viddix |
-| `Pill` | **NEW (Fase 0)** small label with semantic `variant` or tonal `tone` | viddix |
+| `KPIStat` | Fase 0 — dashboard KPI tile with label/value/sub/icon/trend/sparkline | viddix |
+| `Pill` | Fase 0 — small label with semantic `variant` or tonal `tone` | viddix |
 | `Popover` | Floating positioned content | shadcn (base-ui) |
 | `Select` | Combobox-style picker | shadcn (base-ui) |
 | `Sheet` | Side-drawer overlay | shadcn (base-ui) |
-| `Skeleton` | **NEW (Fase 0)** animate-pulse placeholder | viddix |
+| `Skeleton` | Fase 0 — animate-pulse placeholder | viddix |
 | `Tabs` | Tab list + panels | shadcn (base-ui) |
 | `Textarea` | Multi-line text input | shadcn |
-| `Tooltip` | **NEW (Fase 0)** wrapper over base-ui tooltip with single-prop API | viddix |
+| `Tooltip` | Fase 0 — wrapper over base-ui tooltip with single-prop API | viddix |
+
+## Domain components (in `components/dashboard/`)
+
+A small set of route-aware components also lives next to the primitives in
+spirit but in the `dashboard/` folder, because they pull data from hooks.
+
+| Component | What it's for |
+|---|---|
+| `CommandPalette` | **Fase 1** — cmdk-powered ⌘K palette. Mounted in `Topbar`; open via Cmd/Ctrl+K. Groups: Pages, Actions, Leads, Clients, Partners, Tasks. |
+| `EmptyState` | Standard "no data yet" surface. `size="default"` for routes, `size="sm"` for in-sheet/in-tab usage (Fase 1). |
+| `PageHeader` | Title + description + actions; renders ~28-px H1. |
+| `PriorityBadge` / `TaskStatusBadge` / `TeamBadge` | Thin wrappers over `Pill` with a domain enum → tone/variant mapping. |
+| `UserAvatar` | `Avatar` with team-coloured background + ring. |
 
 ## Pill
 
@@ -96,6 +109,54 @@ import { Tooltip } from "@/components/ui/tooltip"
 
 For richer use (controlled `open`, multiple positioners), import
 `TooltipPrimitive` from the same module.
+
+## EmptyState
+
+```tsx
+import { EmptyState } from "@/components/dashboard/empty-state"
+import { Briefcase } from "lucide-react"
+
+// Default — page-level (in a route body)
+<EmptyState
+  icon={<Briefcase className="size-4" />}
+  title="No clients yet"
+  description="Add your first client to start tracking MRR and partners."
+  action={<Button onClick={...}>Add client</Button>}
+/>
+
+// Compact — in a sheet tab, popover, narrow card
+<EmptyState
+  size="sm"
+  title="No notes yet"
+  description="Anything you log here stays on the lead."
+/>
+```
+
+The compact variant skips the dashed border, halves the vertical padding,
+and uses smaller icon + xs typography. Use it whenever a default empty
+state would dwarf its container.
+
+## CommandPalette
+
+```tsx
+import { CommandPalette } from "@/components/dashboard/command-palette"
+
+const [open, setOpen] = React.useState(false)
+
+// Mount once at the top of your layout — Topbar already does this.
+<CommandPalette open={open} onOpenChange={setOpen} />
+```
+
+The palette is globally available via **⌘K** (Mac) / **Ctrl+K**
+(Win/Linux). Implementation lives in `components/dashboard/` because it
+pulls live data from `useLeads` / `useClients` / `usePartners` / `useTasks`.
+It composes `Dialog` + `cmdk` and inherits the project's overlay system.
+
+To add a new section, edit `command-palette.tsx` and follow the existing
+pattern: wrap items in `<Group heading="…">` and render `<PaletteItem
+value="…" onSelect={...} icon={...} label="…" sub="…" />`. The
+`value` string drives cmdk's fuzzy match — include any aliases the user
+might type (e.g. `"action new lead"` matches both "new" and "lead").
 
 ## Skeleton
 
