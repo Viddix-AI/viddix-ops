@@ -61,3 +61,5 @@ the codebase reads `var(--radius)` directly, we can drop it.
 - ✅ Pipeline bars → horizontal `PipelineFunnel` with conversion % (Fase 2)
 - ✅ Dashboard `StatCard` inline → `KPIStat` primitive with deltas + sparklines (Fase 2)
 - ✅ Hand-rolled recent activity → `RecentActivity` from `useActivities()`, grouped by day (Fase 2)
+- ✅ Clients table: density toggle, sticky header, sort polish, multi-select + bulk actions, inline owner edit, per-row menu (Fase 3)
+- ✅ `useDeleteClient` + cascade semantics on localStorage backend (Fase 3)
