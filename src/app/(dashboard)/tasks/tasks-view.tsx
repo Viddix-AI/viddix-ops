@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { CheckSquare } from "lucide-react"
 
 import {
   Select,
@@ -9,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { EmptyState } from "@/components/dashboard/empty-state"
 import { PriorityBadge } from "@/components/dashboard/priority-badge"
 import { TaskStatusBadge } from "@/components/dashboard/status-badge"
 import { UserAvatar } from "@/components/dashboard/user-avatar"
@@ -189,7 +191,11 @@ export function TasksView() {
       })}
 
       {filtered.length === 0 && (
-        <p className="py-12 text-center text-sm text-muted-foreground">No tasks</p>
+        <EmptyState
+          icon={<CheckSquare className="size-4" />}
+          title="No tasks match your filters"
+          description="Loosen a filter or create your first task to get started."
+        />
       )}
     </div>
   )
