@@ -16,13 +16,12 @@ import {
 } from "@/components/ui/select"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { PageHeader } from "@/components/dashboard/page-header"
-import { ClientStatusBadge } from "@/components/dashboard/status-badge"
 import { UserAvatar } from "@/components/dashboard/user-avatar"
 import { useClients, useCreateClient } from "@/hooks/use-clients"
 import { useProfiles } from "@/hooks/use-profile"
 import { downloadCsv, parseCsv, pickCsvFile, toCsv } from "@/lib/csv"
 import { money } from "@/lib/format"
-import { TEAMS, type Client, type ClientStatus, type Team } from "@/lib/types"
+import { TEAMS, type Client, type Team } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { AddClientDialog } from "./add-client-dialog"
 import { TeamBadge } from "@/components/dashboard/team-badge"
@@ -34,7 +33,6 @@ export function ClientsTable() {
   const { data: profiles = [] } = useProfiles()
   const create = useCreateClient()
   const [q, setQ] = React.useState("")
-  const [status, setStatus] = React.useState<ClientStatus | "all">("all")
   const [team, setTeam] = React.useState<Team | "all">("all")
   const [sort, setSort] = React.useState<{ key: SortKey; dir: "asc" | "desc" }>(
     { key: "mrr", dir: "desc" }
@@ -50,7 +48,6 @@ export function ClientsTable() {
   const filtered = React.useMemo(() => {
     const needle = q.trim().toLowerCase()
     return clients
-      .filter((c) => (status === "all" ? true : c.status === status))
       .filter((c) => (team === "all" ? true : teamForClient(c) === team))
       .filter((c) =>
         !needle
@@ -65,11 +62,9 @@ export function ClientsTable() {
         if (sort.key === "mrr") return (Number(a.mrr) - Number(b.mrr)) * dir
         return ((a.started_at ?? "").localeCompare(b.started_at ?? "")) * dir
       })
-  }, [clients, q, status, team, teamForClient, sort])
+  }, [clients, q, team, teamForClient, sort])
 
-  const totalMRR = clients
-    .filter((c) => c.status === "active")
-    .reduce((s, c) => s + Number(c.mrr || 0), 0)
+  const totalMRR = clients.reduce((s, c) => s + Number(c.mrr || 0), 0)
 
   const toggleSort = (key: SortKey) =>
     setSort((s) =>
@@ -80,7 +75,7 @@ export function ClientsTable() {
     <>
       <PageHeader
         title="Clients"
-        description={`${clients.length} clients · ${money(totalMRR)} MRR active`}
+        description={`${clients.length} clients · ${money(totalMRR)} MRR`}
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -128,18 +123,6 @@ export function ClientsTable() {
               className="h-9 pl-8"
             />
           </div>
-          <Select value={status} onValueChange={(v) => setStatus(v as ClientStatus | "all")}>
-            <SelectTrigger size="default" className="w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="paused">Paused</SelectItem>
-              <SelectItem value="prospect">Prospect</SelectItem>
-              <SelectItem value="churned">Churned</SelectItem>
-            </SelectContent>
-          </Select>
           <Select value={team} onValueChange={(v) => setTeam(v as Team | "all")}>
             <SelectTrigger size="default" className="w-44">
               <SelectValue />
@@ -177,7 +160,6 @@ export function ClientsTable() {
                   </Th>
                   <Th>Contact</Th>
                   <Th>Owner</Th>
-                  <Th>Status</Th>
                   <Th onClick={() => toggleSort("mrr")} active={sort.key === "mrr"} dir={sort.dir} align="right">
                     MRR
                   </Th>
@@ -220,11 +202,6 @@ export function ClientsTable() {
                             {owner?.full_name ?? "Unassigned"}
                             {owner?.team && <TeamBadge team={owner.team} />}
                           </span>
-                        </Link>
-                      </Td>
-                      <Td>
-                        <Link href={`/clients/${c.id}`} className="block">
-                          <ClientStatusBadge status={c.status} />
                         </Link>
                       </Td>
                       <Td align="right">
@@ -320,7 +297,6 @@ const CLIENT_CSV_HEADERS = [
   "contact_phone",
   "industry",
   "website",
-  "status",
   "mrr",
   "started_at",
   "notes",
@@ -334,7 +310,6 @@ function exportClientsToCsv(clients: Client[]) {
     c.contact_phone,
     c.industry,
     c.website,
-    c.status,
     c.mrr,
     c.started_at,
     c.notes,
@@ -343,8 +318,6 @@ function exportClientsToCsv(clients: Client[]) {
   downloadCsv(`viddix-clients-${new Date().toISOString().slice(0, 10)}.csv`, csv)
   toast.success(`${clients.length} clients exported`)
 }
-
-const VALID_STATUSES: ClientStatus[] = ["active", "paused", "churned", "prospect"]
 
 async function importClientsFromCsv(
   text: string,
@@ -356,7 +329,6 @@ async function importClientsFromCsv(
   for (const r of rows) {
     const name = r.name?.trim()
     if (!name) continue
-    const statusRaw = (r.status ?? "").toLowerCase().trim()
     await create({
       name,
       contact_name: r.contact_name?.trim() || null,
@@ -364,9 +336,6 @@ async function importClientsFromCsv(
       contact_phone: r.contact_phone?.trim() || null,
       industry: r.industry?.trim() || null,
       website: r.website?.trim() || null,
-      status: VALID_STATUSES.includes(statusRaw as ClientStatus)
-        ? (statusRaw as ClientStatus)
-        : "prospect",
       mrr: Number(r.mrr || 0) || 0,
       started_at: r.started_at?.trim() || null,
       notes: r.notes?.trim() || null,

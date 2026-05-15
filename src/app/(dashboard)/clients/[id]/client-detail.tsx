@@ -21,7 +21,6 @@ import {
 import { EditableTaskRow } from "@/components/dashboard/editable-task-row"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { PageHeader } from "@/components/dashboard/page-header"
-import { ClientStatusBadge } from "@/components/dashboard/status-badge"
 import { UserAvatar } from "@/components/dashboard/user-avatar"
 import { useClient, useUpdateClient } from "@/hooks/use-clients"
 import { useEvents } from "@/hooks/use-events"
@@ -36,7 +35,6 @@ import {
 import { useCurrentProfile, useProfiles } from "@/hooks/use-profile"
 import { useCreateTask, useTasks } from "@/hooks/use-tasks"
 import { money, relativeDay } from "@/lib/format"
-import type { ClientStatus } from "@/lib/types"
 
 export function ClientDetail({ id }: { id: string }) {
   const { data: client } = useClient(id)
@@ -83,7 +81,6 @@ export function ClientDetail({ id }: { id: string }) {
             <ArrowLeft className="size-3.5" /> Back to clients
           </Link>
         }
-        actions={<ClientStatusBadge status={client.status} />}
       />
 
       <div className="space-y-6 px-4 py-5 lg:px-6">
@@ -120,24 +117,6 @@ export function ClientDetail({ id }: { id: string }) {
                   {money(Number(client.mrr || 0))}
                 </p>
               </div>
-              <Field label="Status">
-                <Select
-                  value={client.status}
-                  onValueChange={(v) =>
-                    update.mutate({ id: client.id, patch: { status: v as ClientStatus } })
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="paused">Paused</SelectItem>
-                    <SelectItem value="prospect">Prospect</SelectItem>
-                    <SelectItem value="churned">Churned</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
               <Field label="Owner">
                 <Select
                   value={client.owner_id ?? ""}

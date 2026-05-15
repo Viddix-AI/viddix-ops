@@ -26,6 +26,7 @@ import { EditableTaskRow } from "@/components/dashboard/editable-task-row"
 import { TeamBadge } from "@/components/dashboard/team-badge"
 import { useCreateNote, useNotesFor } from "@/hooks/use-notes"
 import { useCreateTask, useTasks } from "@/hooks/use-tasks"
+import { usePartners } from "@/hooks/use-partners"
 import { useProfiles, useCurrentProfile } from "@/hooks/use-profile"
 import { money, relativeDay } from "@/lib/format"
 import {
@@ -78,6 +79,7 @@ function Inner({
   const createNote = useCreateNote()
   const { data: tasks = [] } = useTasks()
   const createTask = useCreateTask()
+  const { data: partners = [] } = usePartners()
 
   const leadTasks = tasks.filter((t) => t.lead_id === lead.id)
   const [noteText, setNoteText] = React.useState("")
@@ -119,7 +121,29 @@ function Inner({
       </SheetHeader>
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-3">
+          <Field label="Name">
+            <Input
+              key={`name-${lead.id}`}
+              defaultValue={lead.name}
+              onBlur={(e) => {
+                const v = e.target.value.trim()
+                if (v && v !== lead.name) onUpdate({ name: v })
+              }}
+            />
+          </Field>
+          <Field label="Company">
+            <Input
+              key={`company-${lead.id}`}
+              defaultValue={lead.company ?? ""}
+              onBlur={(e) =>
+                onUpdate({ company: e.target.value.trim() || null })
+              }
+            />
+          </Field>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-3">
           <Field label="Stage">
             <Select
               value={lead.stage}
@@ -157,12 +181,14 @@ function Inner({
           </Field>
           <Field label="Email">
             <Input
+              key={`email-${lead.id}`}
               defaultValue={lead.email ?? ""}
               onBlur={(e) => onUpdate({ email: e.target.value || null })}
             />
           </Field>
           <Field label="Value (MRR)">
             <Input
+              key={`value-${lead.id}`}
               type="number"
               defaultValue={String(lead.value ?? 0)}
               onBlur={(e) => onUpdate({ value: Number(e.target.value) || 0 })}
@@ -171,6 +197,59 @@ function Inner({
         </div>
 
         <div className="mt-3 space-y-3">
+          <Field label="Website">
+            <Input
+              key={`website-${lead.id}`}
+              type="url"
+              defaultValue={lead.website ?? ""}
+              onBlur={(e) =>
+                onUpdate({ website: e.target.value.trim() || null })
+              }
+              placeholder="https://example.com"
+            />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Partner">
+              <Select
+                value={lead.partner_id ?? "__none__"}
+                onValueChange={(v) => {
+                  if (v === "__none__") {
+                    onUpdate({ partner_id: null, partner_split_pct: 0 })
+                  } else {
+                    const p = partners.find((x) => x.id === v)
+                    onUpdate({
+                      partner_id: v,
+                      // Seed the split from the partner's default so the
+                      // common case is zero clicks. The user can override
+                      // with the split input next to it.
+                      partner_split_pct: p?.default_split_pct ?? 0,
+                    })
+                  }
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="No partner" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No partner</SelectItem>
+                  {partners.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Partner split %">
+              <SplitInput
+                value={lead.partner_split_pct ?? 0}
+                disabled={!lead.partner_id}
+                onSave={(pct) => onUpdate({ partner_split_pct: pct })}
+              />
+            </Field>
+          </div>
+
           <Field label="Temperature">
             <div className="flex gap-1.5">
               {LEAD_TEMPERATURES.map((t) => {
@@ -328,5 +407,43 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="text-xs font-medium text-foreground/80">{label}</span>
       {children}
     </label>
+  )
+}
+
+// Mirrors the SplitInput in clients/[id]/client-detail.tsx — re-syncs when
+// the upstream value changes after a save round-trip.
+function SplitInput({
+  value,
+  onSave,
+  disabled,
+}: {
+  value: number
+  onSave: (pct: number) => void
+  disabled?: boolean
+}) {
+  const [prev, setPrev] = React.useState(value)
+  const [v, setV] = React.useState(String(value))
+  if (prev !== value) {
+    setPrev(value)
+    setV(String(value))
+  }
+  return (
+    <div className="flex items-center gap-1">
+      <Input
+        type="number"
+        min="0"
+        max="100"
+        value={v}
+        disabled={disabled}
+        onChange={(e) => setV(e.target.value)}
+        onBlur={() => {
+          const n = Math.max(0, Math.min(100, Number(v) || 0))
+          if (n !== value) onSave(n)
+          setV(String(n))
+        }}
+        className="h-9"
+      />
+      <span className="text-xs text-muted-foreground">%</span>
+    </div>
   )
 }

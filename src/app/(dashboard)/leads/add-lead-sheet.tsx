@@ -41,6 +41,7 @@ type Form = {
   company: string
   email: string
   phone: string
+  website: string
   source: string
   stage: LeadStage
   temperature: LeadTemperature
@@ -53,6 +54,7 @@ const EMPTY: Form = {
   company: "",
   email: "",
   phone: "",
+  website: "",
   source: "",
   stage: "new",
   temperature: "warm",
@@ -88,6 +90,7 @@ export function AddLeadSheet({
         company: form.company.trim() || null,
         email: form.email.trim() || null,
         phone: form.phone.trim() || null,
+        website: form.website.trim() || null,
         source: form.source || null,
         stage: form.stage,
         temperature: form.temperature,
@@ -143,6 +146,14 @@ export function AddLeadSheet({
                 />
               </Field>
             </div>
+            <Field label="Website">
+              <Input
+                type="url"
+                value={form.website}
+                onChange={(e) => set("website", e.target.value)}
+                placeholder="https://example.com"
+              />
+            </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Source">
                 <Select

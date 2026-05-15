@@ -35,7 +35,7 @@ import type {
 // keys are abandoned (the user's data on disk stays under the older key, but
 // a fresh seed is written here). Increment whenever a new required field is
 // added so refresh doesn't render with a half-shaped record.
-const KEY = "viddix-ops:v4"
+const KEY = "viddix-ops:v5"
 
 type DB = {
   profiles: Profile[]
@@ -82,6 +82,9 @@ function read(): DB {
       leads:           (parsed.leads ?? fresh.leads).map((l) => ({
         ...l,
         temperature: l.temperature ?? "warm",
+        website: l.website ?? null,
+        partner_id: l.partner_id ?? null,
+        partner_split_pct: l.partner_split_pct ?? 0,
         converted_client_id: l.converted_client_id ?? null,
       })),
       tasks:           parsed.tasks           ?? fresh.tasks,
@@ -192,6 +195,7 @@ const localStore = {
       company: input.company ?? null,
       email: input.email ?? null,
       phone: input.phone ?? null,
+      website: input.website ?? null,
       source: input.source ?? null,
       stage,
       temperature: input.temperature ?? "warm",
@@ -199,6 +203,8 @@ const localStore = {
       position,
       owner_id: input.owner_id ?? null,
       notes: input.notes ?? null,
+      partner_id: input.partner_id ?? null,
+      partner_split_pct: input.partner_split_pct ?? 0,
       converted_client_id: null,
       created_at: now(),
       updated_at: now(),
@@ -282,9 +288,8 @@ const localStore = {
       contact_email: lead.email,
       contact_phone: lead.phone,
       mrr: lead.value,
-      status: "active",
       industry: null,
-      website: null,
+      website: lead.website,
       notes: lead.notes,
       started_at: new Date().toISOString().slice(0, 10),
       owner_id: lead.owner_id,
@@ -299,6 +304,24 @@ const localStore = {
       lead_id: lead.id,
       client_id: client.id,
     })
+    // If the lead had a partner pre-allocated, materialise it as a
+    // client_partners row now so the split doesn't have to be re-entered.
+    if (lead.partner_id) {
+      const partner = db.partners.find((p) => p.id === lead.partner_id)
+      db.client_partners.push({
+        id: uid(),
+        client_id: client.id,
+        partner_id: lead.partner_id,
+        split_pct: lead.partner_split_pct ?? 0,
+        created_at: now(),
+      })
+      record(
+        db,
+        "partner_attached",
+        `${partner?.name ?? "Partner"} attached to ${client.name}`,
+        { partner_id: lead.partner_id, client_id: client.id }
+      )
+    }
     write(db)
     return client
   },
@@ -313,7 +336,6 @@ const localStore = {
       contact_email: input.contact_email ?? null,
       contact_phone: input.contact_phone ?? null,
       mrr: input.mrr ?? 0,
-      status: input.status ?? "active",
       industry: input.industry ?? null,
       website: input.website ?? null,
       notes: input.notes ?? null,
@@ -333,7 +355,7 @@ const localStore = {
     const c = db.clients.find((x) => x.id === id)
     if (!c) return null
     Object.assign(c, patch, { updated_at: now() })
-    if (patch.status !== undefined || patch.mrr !== undefined || patch.owner_id !== undefined) {
+    if (patch.mrr !== undefined || patch.owner_id !== undefined) {
       record(db, "client_updated", `${c.name} updated`, { client_id: c.id })
     }
     write(db)

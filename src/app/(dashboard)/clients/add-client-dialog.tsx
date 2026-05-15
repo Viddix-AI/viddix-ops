@@ -6,13 +6,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -20,21 +13,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { useCreateClient } from "@/hooks/use-clients"
-import type { ClientStatus } from "@/lib/types"
-
-const STATUSES: { value: ClientStatus; label: string }[] = [
-  { value: "active", label: "Active" },
-  { value: "prospect", label: "Prospect" },
-  { value: "paused", label: "Paused" },
-  { value: "churned", label: "Churned" },
-]
 
 type Form = {
   name: string
   company: string
   email: string
   phone: string
-  status: ClientStatus
   mrr: string
   contract_start: string
   contract_end: string
@@ -46,7 +30,6 @@ const EMPTY: Form = {
   company: "",
   email: "",
   phone: "",
-  status: "prospect",
   mrr: "",
   contract_start: "",
   contract_end: "",
@@ -81,7 +64,6 @@ export function AddClientDialog({
         contact_name: form.company.trim() || null,
         contact_email: form.email.trim() || null,
         contact_phone: form.phone.trim() || null,
-        status: form.status,
         mrr: Number(form.mrr) || 0,
         started_at: form.contract_start || null,
         notes: form.notes.trim() || null,
@@ -134,34 +116,15 @@ export function AddClientDialog({
               />
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Status">
-              <Select
-                value={form.status}
-                onValueChange={(v) => set("status", (v ?? "prospect") as ClientStatus)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {STATUSES.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>
-                      {s.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="MRR ($)">
-              <Input
-                type="number"
-                min="0"
-                value={form.mrr}
-                onChange={(e) => set("mrr", e.target.value)}
-                placeholder="0"
-              />
-            </Field>
-          </div>
+          <Field label="MRR ($)">
+            <Input
+              type="number"
+              min="0"
+              value={form.mrr}
+              onChange={(e) => set("mrr", e.target.value)}
+              placeholder="0"
+            />
+          </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Contract start">
               <Input

@@ -8,7 +8,6 @@ export type LeadStage =
   | "won"
   | "lost"
 
-export type ClientStatus = "active" | "paused" | "churned" | "prospect"
 export type TaskStatus = "todo" | "in_progress" | "done"
 export type TaskPriority = "low" | "medium" | "high" | "urgent"
 export type EventType = "call" | "meeting" | "deadline" | "internal"
@@ -36,7 +35,6 @@ export type Client = {
   contact_email: string | null
   contact_phone: string | null
   mrr: number
-  status: ClientStatus
   industry: string | null
   website: string | null
   notes: string | null
@@ -52,6 +50,7 @@ export type Lead = {
   company: string | null
   email: string | null
   phone: string | null
+  website: string | null
   source: string | null
   stage: LeadStage
   temperature: LeadTemperature
@@ -59,6 +58,10 @@ export type Lead = {
   position: number
   owner_id: string | null
   notes: string | null
+  // Pre-allocation of a single partner for the deal. On convertLeadToClient
+  // these become a client_partners row; afterwards they're ignored.
+  partner_id: string | null
+  partner_split_pct: number
   // Set when convertLeadToClient succeeds. Lets the UI prevent double
   // conversions and link back from the lead to the resulting client row.
   converted_client_id: string | null
@@ -190,7 +193,6 @@ export type Database = {
     Functions: Record<string, never>
     Enums: {
       lead_stage: LeadStage
-      client_status: ClientStatus
       task_status: TaskStatus
       task_priority: TaskPriority
       event_type: EventType

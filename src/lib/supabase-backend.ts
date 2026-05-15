@@ -149,6 +149,7 @@ export const supabaseBackend: Backend = {
         company: input.company ?? null,
         email: input.email ?? null,
         phone: input.phone ?? null,
+        website: input.website ?? null,
         source: input.source ?? null,
         stage,
         temperature: input.temperature ?? "warm",
@@ -156,6 +157,8 @@ export const supabaseBackend: Backend = {
         position,
         owner_id: input.owner_id ?? null,
         notes: input.notes ?? null,
+        partner_id: input.partner_id ?? null,
+        partner_split_pct: input.partner_split_pct ?? 0,
         converted_client_id: null,
       })
       .select()
@@ -220,9 +223,8 @@ export const supabaseBackend: Backend = {
         contact_email: lead.email,
         contact_phone: lead.phone,
         mrr: lead.value,
-        status: "active",
         industry: null,
-        website: null,
+        website: lead.website,
         notes: lead.notes,
         started_at: new Date().toISOString().slice(0, 10),
         owner_id: lead.owner_id,
@@ -234,6 +236,29 @@ export const supabaseBackend: Backend = {
       .from("leads")
       .update({ stage: "won", converted_client_id: client.id })
       .eq("id", lead.id)
+    // Materialise the lead's pre-allocated partner as a client_partners row
+    // so the split survives conversion.
+    if (lead.partner_id) {
+      await db()
+        .from("client_partners")
+        .upsert(
+          {
+            client_id: client.id,
+            partner_id: lead.partner_id,
+            split_pct: lead.partner_split_pct ?? 0,
+          },
+          { onConflict: "client_id,partner_id" }
+        )
+      logActivity({
+        kind: "partner_attached",
+        message: `Partner attached to ${client.name}`,
+        lead_id: lead.id,
+        client_id: client.id,
+        partner_id: lead.partner_id,
+        task_id: null,
+        actor_id: null,
+      })
+    }
     logActivity({
       kind: "lead_converted",
       message: `${lead.name} converted to client`,
@@ -256,7 +281,6 @@ export const supabaseBackend: Backend = {
         contact_email: input.contact_email ?? null,
         contact_phone: input.contact_phone ?? null,
         mrr: input.mrr ?? 0,
-        status: input.status ?? "active",
         industry: input.industry ?? null,
         website: input.website ?? null,
         notes: input.notes ?? null,

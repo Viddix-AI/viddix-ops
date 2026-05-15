@@ -38,8 +38,7 @@ export default function DashboardHome() {
   const { data: partners = [] } = usePartners()
   const { data: clientPartners = [] } = useClientPartners()
 
-  const activeClients = clients.filter((c) => c.status === "active")
-  const mrr = activeClients.reduce((s, c) => s + Number(c.mrr || 0), 0)
+  const mrr = clients.reduce((s, c) => s + Number(c.mrr || 0), 0)
   const openLeads = leads.filter((l) => l.stage !== "won" && l.stage !== "lost")
   const todayISO = new Date().toISOString().slice(0, 10)
   const todayTasks = tasks.filter(
@@ -51,11 +50,10 @@ export default function DashboardHome() {
   // is left after every split on that client. Derives `activeClients` inline
   // so React Compiler can preserve memoization across re-renders.
   const partnerEarnings = React.useMemo(() => {
-    const active = clients.filter((c) => c.status === "active")
     const byPartner = new Map<string, number>()
     let totalToPartners = 0
     let houseShare = 0
-    for (const c of active) {
+    for (const c of clients) {
       const links = clientPartners.filter((cp) => cp.client_id === c.id)
       const allocated = links.reduce((s, l) => s + l.split_pct, 0)
       houseShare += (Number(c.mrr || 0) * Math.max(0, 100 - allocated)) / 100
@@ -142,13 +140,13 @@ export default function DashboardHome() {
           <StatCard
             label="Monthly recurring revenue"
             value={money(mrr)}
-            sub={`${activeClients.length} active clients`}
+            sub={`${clients.length} clients`}
             icon={<TrendingUp className="size-4" />}
           />
           <StatCard
-            label="Active clients"
-            value={String(activeClients.length)}
-            sub={`${clients.length} total`}
+            label="Clients"
+            value={String(clients.length)}
+            sub={`${money(mrr)}/mo total`}
             icon={<Users className="size-4" />}
           />
           <StatCard
