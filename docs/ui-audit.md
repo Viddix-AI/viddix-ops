@@ -65,7 +65,7 @@ Select, Sheet, Tabs, Textarea — all shadcn/base-ui.
 - `KPIStat` (re-usable dashboard stat tile) ✅ added in Fase 0
 - `Tooltip` ✅ added in Fase 0
 - `Skeleton` ✅ added in Fase 0
-- `CommandPalette` — Fase 1
+- `CommandPalette` ✅ added in Fase 1 (lives in `components/dashboard/`)
 - `Table` opinionated wrapper — Fase 3
 - `KanbanColumn` opinionated wrapper — Fase 4
 

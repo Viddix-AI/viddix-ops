@@ -13,16 +13,6 @@ absorb it. **Don't fix here silently** — file the work where it belongs.
 
 **Fix**: replace with `bg-primary` / use a CSS var. Fase 6 polish.
 
-### Bare `<p>` empty states inside lead-detail-sheet
-
-- `src/app/(dashboard)/leads/lead-detail-sheet.tsx:330` — "No notes yet"
-- `src/app/(dashboard)/leads/lead-detail-sheet.tsx:389` — "No tasks yet"
-
-These live inside narrow tab panels in a side sheet. A full EmptyState
-would dwarf the panel. Either (a) build a smaller `EmptyState size="sm"`
-variant or (b) accept the inline pattern as canonical for in-sheet contexts.
-Decide during Fase 4 (leads kanban polish).
-
 ### Activity feed icon tones — non-semantic
 
 - `src/app/(dashboard)/activity/activity-view.tsx:29-48` — the `ICONS`
@@ -73,3 +63,6 @@ the codebase reads `var(--radius)` directly, we can drop it.
 - ✅ `--muted-foreground` AA lift (Fase 0)
 - ✅ `--destructive` AA lift (Fase 0)
 - ✅ Global `:focus-visible` outline (Fase 0)
+- ✅ Lead-detail-sheet in-tab empty states → `EmptyState size="sm"` (Fase 1)
+- ✅ Topbar global search → `CommandPalette` via ⌘K (Fase 1)
+- ✅ Small uppercase labels (`text-[10px]`) gained `font-medium` weight (Fase 1)
