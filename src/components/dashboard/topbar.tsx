@@ -30,13 +30,14 @@ export function Topbar() {
   const me = useCurrentProfile()
   const qc = useQueryClient()
   const [paletteOpen, setPaletteOpen] = React.useState(false)
-  // Detect Mac so the kbd hint shows ⌘ instead of Ctrl. Computed inside an
-  // effect so SSR renders a stable default (non-Mac) and the client hydrates
-  // to the real value — avoids hydration mismatch.
-  const [isMac, setIsMac] = React.useState(false)
-  React.useEffect(() => {
+  // Detect Mac so the kbd hint shows ⌘ instead of Ctrl. Uses the
+  // "store-info-from-previous-renders" pattern (see also Sidebar's
+  // StorageStatus + client-detail's SplitInput) so we never call setState
+  // inside an effect — render reads the value once, then converges.
+  const [isMac, setIsMac] = React.useState<boolean | null>(null)
+  if (isMac === null && typeof navigator !== "undefined") {
     setIsMac(/Mac|iPhone|iPad/.test(navigator.userAgent))
-  }, [])
+  }
 
   // Global ⌘K / Ctrl+K shortcut. Capture-phase listener so it wins over any
   // focused input that might also bind cmd+k. Also handles `/` as a quick
@@ -100,7 +101,7 @@ export function Topbar() {
         <Search className="size-4 shrink-0" />
         <span className="flex-1 text-left">Search clients, leads, tasks…</span>
         <kbd className="inline-flex h-5 items-center gap-0.5 rounded-sm border border-border bg-background px-1 font-mono text-[10px] text-text-secondary shadow-sm">
-          <span>{isMac ? "⌘" : "Ctrl"}</span>
+          <span>{isMac === true ? "⌘" : "Ctrl"}</span>
           <span>K</span>
         </kbd>
       </button>
