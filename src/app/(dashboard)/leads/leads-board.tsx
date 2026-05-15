@@ -12,6 +12,7 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Pill } from "@/components/ui/pill"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { UserAvatar } from "@/components/dashboard/user-avatar"
@@ -261,14 +262,9 @@ export function LeadsBoard() {
                 >
                   <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
                     <div className="flex items-center gap-2">
-                      <span
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                          stage.tone
-                        )}
-                      >
+                      <Pill tone={stage.pillTone} size="sm" uppercase>
                         {stage.label}
-                      </span>
+                      </Pill>
                       <span className="text-xs text-muted-foreground">
                         {items.length}
                       </span>

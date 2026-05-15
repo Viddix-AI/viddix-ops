@@ -1,4 +1,4 @@
-import { cn } from "@/lib/utils"
+import { Pill } from "@/components/ui/pill"
 import { teamFor, type Team } from "@/lib/types"
 
 /**
@@ -18,15 +18,14 @@ export function TeamBadge({
   if (!team) return null
   const t = teamFor(team)
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-1.5 py-0 text-[9px] font-semibold uppercase tracking-wider",
-        t.badge,
-        className
-      )}
+    <Pill
+      tone={t.pillTone}
+      size="sm"
+      uppercase
       title={t.label}
+      className={className}
     >
       {variant === "short" ? t.short : t.label}
-    </span>
+    </Pill>
   )
 }

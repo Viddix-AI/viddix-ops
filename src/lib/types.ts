@@ -201,36 +201,54 @@ export type Database = {
   }
 }
 
-export const LEAD_STAGES: { id: LeadStage; label: string; tone: string }[] = [
-  { id: "new",         label: "New",         tone: "bg-slate-100 text-slate-700" },
-  { id: "contacted",   label: "Contacted",   tone: "bg-blue-100 text-blue-700" },
-  { id: "qualified",   label: "Qualified",   tone: "bg-indigo-100 text-indigo-700" },
-  { id: "proposal",    label: "Proposal",    tone: "bg-violet-100 text-violet-700" },
-  { id: "negotiation", label: "Negotiation", tone: "bg-amber-100 text-amber-800" },
-  { id: "won",         label: "Won",         tone: "bg-emerald-100 text-emerald-700" },
-  { id: "lost",        label: "Lost",        tone: "bg-rose-100 text-rose-700" },
+// PillTone strings (kept as plain string literals so this file stays
+// import-free — the Pill primitive re-exports the same union via PillTone).
+type DataTone =
+  | "blue"
+  | "sky"
+  | "indigo"
+  | "violet"
+  | "emerald"
+  | "amber"
+  | "rose"
+  | "slate"
+
+export const LEAD_STAGES: {
+  id: LeadStage
+  label: string
+  pillTone: DataTone
+}[] = [
+  { id: "new",         label: "New",         pillTone: "slate" },
+  { id: "contacted",   label: "Contacted",   pillTone: "blue" },
+  { id: "qualified",   label: "Qualified",   pillTone: "indigo" },
+  { id: "proposal",    label: "Proposal",    pillTone: "violet" },
+  { id: "negotiation", label: "Negotiation", pillTone: "amber" },
+  { id: "won",         label: "Won",         pillTone: "emerald" },
+  { id: "lost",        label: "Lost",        pillTone: "rose" },
 ]
 
 export const LEAD_TEMPERATURES: {
   id: LeadTemperature
   label: string
-  tone: string
+  pillTone: DataTone
+  /** Bare colour class for the small status dot used in filter chips. */
   dot: string
 }[] = [
-  { id: "hot",  label: "Hot",  tone: "bg-rose-100 text-rose-700",     dot: "bg-rose-500" },
-  { id: "warm", label: "Warm", tone: "bg-amber-100 text-amber-800",   dot: "bg-amber-500" },
-  { id: "cold", label: "Cold", tone: "bg-sky-100 text-sky-700",       dot: "bg-sky-500" },
+  { id: "hot",  label: "Hot",  pillTone: "rose",  dot: "bg-rose-500" },
+  { id: "warm", label: "Warm", pillTone: "amber", dot: "bg-amber-500" },
+  { id: "cold", label: "Cold", pillTone: "sky",   dot: "bg-sky-500" },
 ]
 
-// Visual identity for each team. `avatarTone` colours the user-avatar
-// fallback so you spot at a glance who belongs where. `ringTone` is the
-// 1-2px outer ring around the avatar — distinct enough to read without
-// peeking at the initials.
+// Visual identity for each team.
+//   - `pillTone` feeds the Pill primitive (used by TeamBadge + filter chips).
+//   - `avatarTone` / `ringTone` colour the UserAvatar background + outer ring
+//     directly because Avatar isn't a Pill (different shape, different sizes).
+//     These stay as raw Tailwind class strings for now.
 export const TEAMS: {
   id: Team
   label: string
   short: string
-  badge: string   // pill tone (used in chips/filters)
+  pillTone: DataTone
   avatarTone: string
   ringTone: string
 }[] = [
@@ -238,7 +256,7 @@ export const TEAMS: {
     id: "madrid",
     label: "Madrid",
     short: "MAD",
-    badge: "bg-blue-100 text-blue-700",
+    pillTone: "blue",
     avatarTone: "bg-blue-100 text-blue-700",
     ringTone: "ring-blue-400",
   },
@@ -246,7 +264,7 @@ export const TEAMS: {
     id: "us",
     label: "US",
     short: "US",
-    badge: "bg-emerald-100 text-emerald-700",
+    pillTone: "emerald",
     avatarTone: "bg-emerald-100 text-emerald-700",
     ringTone: "ring-emerald-400",
   },
