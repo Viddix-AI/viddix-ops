@@ -7,6 +7,7 @@ import {
   CalendarPlus,
   CheckCircle2,
   Clock,
+  Handshake,
   TrendingUp,
   Users,
 } from "lucide-react"
@@ -14,9 +15,10 @@ import {
 import { googleCalendarUrl } from "@/lib/ics"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { KPIStat } from "@/components/ui/kpi-stat"
+import { Sparkline } from "@/components/ui/sparkline"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { PageHeader } from "@/components/dashboard/page-header"
-import { PriorityBadge } from "@/components/dashboard/priority-badge"
 import { UserAvatar } from "@/components/dashboard/user-avatar"
 import { useClients } from "@/hooks/use-clients"
 import { useEvents } from "@/hooks/use-events"
@@ -25,8 +27,17 @@ import { useClientPartners, usePartners } from "@/hooks/use-partners"
 import { useCurrentProfile, useProfiles } from "@/hooks/use-profile"
 import { useTasks } from "@/hooks/use-tasks"
 import { money, relativeDay } from "@/lib/format"
-import { LEAD_STAGES } from "@/lib/types"
-import { cn } from "@/lib/utils"
+import {
+  activeClientsSeries,
+  deltaFromSeries,
+  mrrSeries,
+  openLeadsSeries,
+  tasksDoneSeries,
+} from "@/lib/metrics"
+import { PipelineFunnel } from "./pipeline-funnel"
+import { RecentActivity } from "./recent-activity"
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000
 
 export default function DashboardHome() {
   const me = useCurrentProfile()
@@ -38,17 +49,45 @@ export default function DashboardHome() {
   const { data: partners = [] } = usePartners()
   const { data: clientPartners = [] } = useClientPartners()
 
+  // ── Time anchors (impure — bake into a useMemo so render stays pure) ────
+  const { todayISO, monthStart, nowMs } = React.useMemo(() => {
+    const d = new Date()
+    return {
+      todayISO: d.toISOString().slice(0, 10),
+      monthStart: new Date(d.getFullYear(), d.getMonth(), 1).getTime(),
+      nowMs: d.getTime(),
+    }
+  }, [])
+
+  // ── Aggregates ────────────────────────────────────────────────────────────
   const mrr = clients.reduce((s, c) => s + Number(c.mrr || 0), 0)
   const openLeads = leads.filter((l) => l.stage !== "won" && l.stage !== "lost")
-  const todayISO = new Date().toISOString().slice(0, 10)
+  const pipelineValue = openLeads.reduce((s, l) => s + Number(l.value || 0), 0)
   const todayTasks = tasks.filter(
     (t) => t.status !== "done" && t.due_date && t.due_date <= todayISO
   )
+  const urgentToday = todayTasks.filter((t) => t.priority === "urgent")
 
-  // Partner earnings: per partner, sum (client.mrr * split_pct / 100) across
-  // every active retainer they're attached to. The "house share" is whatever
-  // is left after every split on that client. Derives `activeClients` inline
-  // so React Compiler can preserve memoization across re-renders.
+  // Won-this-month: leads in `won` whose updated_at falls in the calendar
+  // month-to-date. We use updated_at because that's the conversion stamp.
+  const wonThisMonth = leads.filter(
+    (l) => l.stage === "won" && new Date(l.updated_at).getTime() >= monthStart
+  )
+  const wonThisMonthValue = wonThisMonth.reduce(
+    (s, l) => s + Number(l.value || 0),
+    0
+  )
+
+  // Tasks completed in the last 7 days (looser bucket than "this calendar
+  // week" so the metric doesn't reset on Monday morning).
+  const doneThisWeek = tasks.filter(
+    (t) =>
+      t.status === "done" &&
+      nowMs - new Date(t.updated_at).getTime() <= WEEK_MS
+  ).length
+
+  // Partner earnings: per-partner sum of (client.mrr * split_pct / 100)
+  // across every retainer. House share = whatever's left.
   const partnerEarnings = React.useMemo(() => {
     const byPartner = new Map<string, number>()
     let totalToPartners = 0
@@ -74,10 +113,23 @@ export default function DashboardHome() {
     return { rows, totalToPartners, houseShare }
   }, [clients, clientPartners, partners])
 
-  // Conversion-by-source: per known source string, count leads + how many
-  // ended in `won`. Skips empty sources to keep the table clean.
+  // ── Time series for sparklines ───────────────────────────────────────────
+  const series = React.useMemo(
+    () => ({
+      mrr: mrrSeries(clients),
+      activeClients: activeClientsSeries(clients),
+      openLeads: openLeadsSeries(leads),
+      tasksDone: tasksDoneSeries(tasks),
+    }),
+    [clients, leads, tasks]
+  )
+
+  // ── Conversion by source ─────────────────────────────────────────────────
   const sourceConversion = React.useMemo(() => {
-    const map = new Map<string, { total: number; won: number; pipelineValue: number }>()
+    const map = new Map<
+      string,
+      { total: number; won: number; pipelineValue: number }
+    >()
     for (const l of leads) {
       const key = (l.source ?? "").trim()
       if (!key) continue
@@ -96,37 +148,22 @@ export default function DashboardHome() {
       .sort((a, b) => b.total - a.total)
   }, [leads])
 
-  const upcoming = [...events]
-    .filter((e) => new Date(e.start_at) >= new Date())
-    .sort((a, b) => +new Date(a.start_at) - +new Date(b.start_at))
-    .slice(0, 5)
+  const upcoming = React.useMemo(
+    () =>
+      [...events]
+        .filter((e) => new Date(e.start_at).getTime() >= nowMs)
+        .sort((a, b) => +new Date(a.start_at) - +new Date(b.start_at))
+        .slice(0, 5),
+    [events, nowMs]
+  )
 
-  const greeting = (() => {
+  const greeting = React.useMemo(() => {
     const h = new Date().getHours()
     if (h < 12) return "Good morning"
     if (h < 18) return "Good afternoon"
     return "Good evening"
-  })()
+  }, [])
   const firstName = me.full_name.split(" ")[0]
-
-  const recent = [
-    ...leads.slice(-3).map((l) => ({
-      kind: "lead" as const,
-      id: l.id,
-      title: `${l.name} — ${l.company ?? "lead"}`,
-      meta: `Stage · ${LEAD_STAGES.find((s) => s.id === l.stage)?.label}`,
-      ts: l.updated_at,
-    })),
-    ...tasks.slice(-3).map((t) => ({
-      kind: "task" as const,
-      id: t.id,
-      title: t.title,
-      meta: t.status === "done" ? "Completed" : "Updated",
-      ts: t.updated_at,
-    })),
-  ]
-    .sort((a, b) => +new Date(b.ts) - +new Date(a.ts))
-    .slice(0, 6)
 
   return (
     <>
@@ -136,139 +173,102 @@ export default function DashboardHome() {
       />
 
       <div className="space-y-6 px-4 py-6 lg:px-6">
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard
-            label="Monthly recurring revenue"
-            value={money(mrr)}
-            sub={`${clients.length} clients`}
-            icon={<TrendingUp className="size-4" />}
-          />
-          <StatCard
-            label="Clients"
-            value={String(clients.length)}
-            sub={`${money(mrr)}/mo total`}
-            icon={<Users className="size-4" />}
-          />
-          <StatCard
-            label="Open leads"
-            value={String(openLeads.length)}
-            sub={`${money(openLeads.reduce((s, l) => s + Number(l.value || 0), 0))} potential`}
-            icon={<ArrowUpRight className="size-4" />}
-          />
-          <StatCard
-            label="Tasks due today"
-            value={String(todayTasks.length)}
-            sub={tasks.filter((t) => t.status === "done").length + " done · all-time"}
-            icon={<CheckCircle2 className="size-4" />}
-            tone={todayTasks.some((t) => t.priority === "urgent") ? "warn" : "ok"}
-          />
-        </section>
-
-        <section className="grid gap-4 sm:grid-cols-2">
-          <StatCard
-            label="House share"
-            value={money(partnerEarnings.houseShare)}
-            sub={`${money(partnerEarnings.totalToPartners)}/mo to partners`}
-            icon={<TrendingUp className="size-4" />}
-          />
-          <StatCard
-            label="Total partners"
-            value={String(partners.length)}
-            sub={`${clientPartners.length} client links`}
-            icon={<Users className="size-4" />}
-          />
-        </section>
-
-        <section className="grid gap-4 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>Pipeline</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-7 gap-2">
-                {LEAD_STAGES.map((stage) => {
-                  const count = leads.filter((l) => l.stage === stage.id).length
-                  const total = leads.length || 1
-                  const pct = (count / total) * 100
-                  return (
-                    <div key={stage.id} className="space-y-1">
-                      <div className="h-20 rounded-md bg-muted/60">
-                        <div
-                          className="h-full w-full rounded-md transition-all"
-                          style={{
-                            background:
-                              "linear-gradient(180deg, rgba(79,142,247,.18) 0%, rgba(79,142,247,.5) 100%)",
-                            transform: `scaleY(${Math.max(pct / 100, 0.06)})`,
-                            transformOrigin: "bottom",
-                          }}
-                        />
-                      </div>
-                      <p className="text-[10px] font-medium text-muted-foreground">
-                        {stage.label}
-                      </p>
-                      <p className="text-sm font-semibold tabular-nums">
-                        {count}
-                      </p>
-                    </div>
-                  )
-                })}
-              </div>
-              <div className="mt-4 flex items-center justify-between border-t border-border pt-3 text-xs text-muted-foreground">
-                <span>{leads.length} total leads</span>
-                <Link
-                  href="/leads"
-                  className="font-medium text-primary hover:underline"
-                >
-                  Open pipeline →
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Tasks due today</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {todayTasks.length === 0 ? (
-                <EmptyState
-                  icon={<CheckCircle2 className="size-4" />}
-                  title="All clear"
-                  description="No tasks due today. Nice."
-                  className="py-6"
+        {/* ── Revenue row ────────────────────────────────────────────────── */}
+        <section>
+          <SectionLabel>Revenue</SectionLabel>
+          <div className="mt-2 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <KPIStat
+              label="Monthly recurring revenue"
+              value={money(mrr)}
+              sub={`${clients.length} clients`}
+              icon={<TrendingUp className="size-4" />}
+              trend={deltaFromSeries(series.mrr) ?? undefined}
+              sparkline={
+                <Sparkline data={series.mrr} className="text-primary" />
+              }
+            />
+            <KPIStat
+              label="Active clients"
+              value={String(clients.length)}
+              sub={`${money(mrr)}/mo total`}
+              icon={<Users className="size-4" />}
+              trend={deltaFromSeries(series.activeClients) ?? undefined}
+              sparkline={
+                <Sparkline
+                  data={series.activeClients}
+                  className="text-primary"
                 />
-              ) : (
-                <ul className="space-y-2.5">
-                  {todayTasks.slice(0, 6).map((t) => {
-                    const owner = profiles.find((p) => p.id === t.assignee_id)
-                    return (
-                      <li
-                        key={t.id}
-                        className="flex items-start gap-2.5 rounded-md p-2 -mx-2 hover:bg-muted/60"
-                      >
-                        <UserAvatar profile={owner} size="sm" />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium">{t.title}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {relativeDay(t.due_date)}
-                          </p>
-                        </div>
-                        <PriorityBadge priority={t.priority} />
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-              <Link
-                href="/tasks"
-                className="mt-3 block text-xs font-medium text-primary hover:underline"
-              >
-                View all tasks →
-              </Link>
-            </CardContent>
-          </Card>
+              }
+            />
+            <KPIStat
+              label="House share"
+              value={money(partnerEarnings.houseShare)}
+              sub={`${money(partnerEarnings.totalToPartners)}/mo to partners`}
+              icon={<TrendingUp className="size-4" />}
+              tone="ok"
+            />
+            <KPIStat
+              label="Partners"
+              value={String(partners.length)}
+              sub={`${clientPartners.length} client links`}
+              icon={<Handshake className="size-4" />}
+            />
+          </div>
         </section>
 
+        {/* ── Operations row ─────────────────────────────────────────────── */}
+        <section>
+          <SectionLabel>Operations</SectionLabel>
+          <div className="mt-2 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <KPIStat
+              label="Open leads"
+              value={String(openLeads.length)}
+              sub={`${money(pipelineValue)} pipeline`}
+              icon={<ArrowUpRight className="size-4" />}
+              trend={deltaFromSeries(series.openLeads) ?? undefined}
+              sparkline={
+                <Sparkline data={series.openLeads} className="text-primary" />
+              }
+            />
+            <KPIStat
+              label="Won this month"
+              value={String(wonThisMonth.length)}
+              sub={
+                wonThisMonth.length > 0
+                  ? `${money(wonThisMonthValue)} closed`
+                  : "Nothing yet"
+              }
+              icon={<CheckCircle2 className="size-4" />}
+              tone="ok"
+            />
+            <KPIStat
+              label="Tasks due today"
+              value={String(todayTasks.length)}
+              sub={
+                urgentToday.length > 0
+                  ? `${urgentToday.length} urgent`
+                  : "No urgent tasks"
+              }
+              icon={<CheckCircle2 className="size-4" />}
+              tone={urgentToday.length > 0 ? "warn" : "default"}
+            />
+            <KPIStat
+              label="Tasks done this week"
+              value={String(doneThisWeek)}
+              sub={`${tasks.filter((t) => t.status === "done").length} all time`}
+              icon={<CheckCircle2 className="size-4" />}
+              trend={deltaFromSeries(series.tasksDone) ?? undefined}
+              sparkline={
+                <Sparkline data={series.tasksDone} className="text-primary" />
+              }
+            />
+          </div>
+        </section>
+
+        {/* ── Pipeline funnel ────────────────────────────────────────────── */}
+        <PipelineFunnel leads={leads} />
+
+        {/* ── Partner earnings + Conversion by source ────────────────────── */}
         <section className="grid gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader>
@@ -277,9 +277,9 @@ export default function DashboardHome() {
             <CardContent>
               {partnerEarnings.rows.length === 0 ? (
                 <EmptyState
+                  size="sm"
                   title="No partners"
                   description="Add a partner to start tracking splits."
-                  className="py-6"
                 />
               ) : (
                 <ul className="space-y-2">
@@ -292,12 +292,14 @@ export default function DashboardHome() {
                           <span className="truncate font-medium">{r.name}</span>
                           <span className="shrink-0 tabular-nums">
                             {money(r.earned)}
-                            <span className="ml-0.5 text-[10px] text-muted-foreground">/mo</span>
+                            <span className="ml-0.5 text-[10px] font-medium text-muted-foreground">
+                              /mo
+                            </span>
                           </span>
                         </div>
                         <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                           <div
-                            className="h-full rounded-full bg-blue-500/80"
+                            className="h-full rounded-full bg-primary/80"
                             style={{ width: `${Math.max(pct, 4)}%` }}
                           />
                         </div>
@@ -322,9 +324,9 @@ export default function DashboardHome() {
             <CardContent>
               {sourceConversion.length === 0 ? (
                 <EmptyState
+                  size="sm"
                   title="No source data"
                   description="Add leads with a source to see conversion rates."
-                  className="py-6"
                 />
               ) : (
                 <ul className="divide-y divide-border">
@@ -335,7 +337,7 @@ export default function DashboardHome() {
                     >
                       <div className="min-w-0">
                         <p className="truncate font-medium">{s.source}</p>
-                        <p className="text-[11px] text-muted-foreground">
+                        <p className="text-[11px] font-medium text-muted-foreground">
                           {s.total} lead{s.total === 1 ? "" : "s"} ·{" "}
                           {money(s.pipelineValue)} pipeline
                         </p>
@@ -344,7 +346,7 @@ export default function DashboardHome() {
                         <p className="font-heading text-sm font-semibold tabular-nums">
                           {s.rate.toFixed(0)}%
                         </p>
-                        <p className="text-[11px] text-muted-foreground">
+                        <p className="text-[11px] font-medium text-muted-foreground">
                           {s.won}/{s.total} won
                         </p>
                       </div>
@@ -356,7 +358,11 @@ export default function DashboardHome() {
           </Card>
         </section>
 
+        {/* ── Recent activity + Upcoming events ──────────────────────────── */}
         <section className="grid gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <RecentActivity />
+          </div>
           <Card>
             <CardHeader>
               <CardTitle>Upcoming events</CardTitle>
@@ -365,8 +371,8 @@ export default function DashboardHome() {
               {upcoming.length === 0 ? (
                 <EmptyState
                   icon={<Clock className="size-4" />}
+                  size="sm"
                   title="No upcoming events"
-                  className="py-6"
                 />
               ) : (
                 <ul className="space-y-3">
@@ -386,7 +392,7 @@ export default function DashboardHome() {
                           <p className="truncate text-sm font-medium">
                             {e.title}
                           </p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs font-medium text-muted-foreground">
                             {dt.toLocaleString("en-US", {
                               hour: "numeric",
                               minute: "2-digit",
@@ -404,7 +410,7 @@ export default function DashboardHome() {
                           target="_blank"
                           rel="noopener noreferrer"
                           title="Add to Google Calendar"
-                          className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                          className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                         >
                           <CalendarPlus className="size-3.5" />
                         </a>
@@ -421,89 +427,57 @@ export default function DashboardHome() {
               </Link>
             </CardContent>
           </Card>
+        </section>
 
-          <Card className="lg:col-span-2">
+        {/* ── Today's tasks (compact list, kept from previous layout) ────── */}
+        {todayTasks.length > 0 && (
+          <Card>
             <CardHeader>
-              <CardTitle>Recent activity</CardTitle>
+              <CardTitle>Tasks due today</CardTitle>
             </CardHeader>
             <CardContent>
-              {recent.length === 0 ? (
-                <EmptyState title="Nothing yet" className="py-6" />
-              ) : (
-                <ul className="space-y-3">
-                  {recent.map((r) => (
+              <ul className="space-y-2.5">
+                {todayTasks.slice(0, 6).map((t) => {
+                  const owner = profiles.find((p) => p.id === t.assignee_id)
+                  return (
                     <li
-                      key={`${r.kind}-${r.id}`}
-                      className="flex items-start gap-3 rounded-md border border-border bg-background p-3"
+                      key={t.id}
+                      className="flex items-start gap-2.5 rounded-md p-2 -mx-2 transition-colors hover:bg-muted/60"
                     >
-                      <span
-                        className={cn(
-                          "mt-0.5 grid size-7 place-items-center rounded-md text-[10px] font-semibold uppercase ring-1",
-                          r.kind === "lead"
-                            ? "bg-blue-50 text-blue-700 ring-blue-100"
-                            : "bg-emerald-50 text-emerald-700 ring-emerald-100"
-                        )}
-                      >
-                        {r.kind === "lead" ? "L" : "T"}
-                      </span>
+                      <UserAvatar profile={owner} size="sm" />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{r.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {r.meta} · {relativeDay(r.ts)}
+                        <p className="truncate text-sm font-medium">{t.title}</p>
+                        <p className="text-xs font-medium text-muted-foreground">
+                          {relativeDay(t.due_date)}
                         </p>
                       </div>
                     </li>
-                  ))}
-                </ul>
-              )}
+                  )
+                })}
+              </ul>
+              <Link
+                href="/tasks"
+                className="mt-3 block text-xs font-medium text-primary hover:underline"
+              >
+                View all tasks →
+              </Link>
             </CardContent>
           </Card>
-        </section>
+        )}
       </div>
     </>
   )
 }
 
-function StatCard({
-  label,
-  value,
-  sub,
-  icon,
-  tone = "default",
-}: {
-  label: string
-  value: string
-  sub?: string
-  icon?: React.ReactNode
-  tone?: "default" | "warn" | "ok"
-}) {
+/**
+ * Small uppercase section label that headers each KPI row. Pulls the same
+ * 10px font-medium uppercase tracking pattern used elsewhere in the app
+ * for visual consistency.
+ */
+function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-3 py-2">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-medium text-muted-foreground">{label}</p>
-          <span
-            className={cn(
-              "grid size-7 place-items-center rounded-md ring-1",
-              tone === "warn"
-                ? "bg-amber-50 text-amber-700 ring-amber-100"
-                : tone === "ok"
-                ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
-                : "bg-accent text-accent-foreground ring-blue-100"
-            )}
-          >
-            {icon}
-          </span>
-        </div>
-        <div>
-          <p className="font-heading text-2xl font-semibold tabular-nums tracking-tight">
-            {value}
-          </p>
-          {sub && (
-            <p className="mt-0.5 text-xs font-medium text-muted-foreground">{sub}</p>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+    <p className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+      {children}
+    </p>
   )
 }
