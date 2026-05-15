@@ -32,6 +32,7 @@ belong in this folder. Put it next to the route or under `components/dashboard/`
 | `Select` | Combobox-style picker | shadcn (base-ui) |
 | `Sheet` | Side-drawer overlay | shadcn (base-ui) |
 | `Skeleton` | Fase 0 — animate-pulse placeholder | viddix |
+| `Sparkline` | Fase 2 — pure-SVG mini line chart for KPI tiles, no external lib | viddix |
 | `Tabs` | Tab list + panels | shadcn (base-ui) |
 | `Textarea` | Multi-line text input | shadcn |
 | `Tooltip` | Fase 0 — wrapper over base-ui tooltip with single-prop API | viddix |
@@ -43,7 +44,9 @@ spirit but in the `dashboard/` folder, because they pull data from hooks.
 
 | Component | What it's for |
 |---|---|
-| `CommandPalette` | **Fase 1** — cmdk-powered ⌘K palette. Mounted in `Topbar`; open via Cmd/Ctrl+K. Groups: Pages, Actions, Leads, Clients, Partners, Tasks. |
+| `CommandPalette` | Fase 1 — cmdk-powered ⌘K palette. Mounted in `Topbar`; open via Cmd/Ctrl+K. Groups: Pages, Actions, Leads, Clients, Partners, Tasks. |
+| `PipelineFunnel` | Fase 2 — horizontal funnel of leads stages with conversion % between stages. Used on the dashboard; expects `Lead[]`. |
+| `RecentActivity` | Fase 2 — `useActivities()` feed grouped by day with avatars + relative time. Used on the dashboard. |
 | `EmptyState` | Standard "no data yet" surface. `size="default"` for routes, `size="sm"` for in-sheet/in-tab usage (Fase 1). |
 | `PageHeader` | Title + description + actions; renders ~28-px H1. |
 | `PriorityBadge` / `TaskStatusBadge` / `TeamBadge` | Thin wrappers over `Pill` with a domain enum → tone/variant mapping. |
@@ -157,6 +160,33 @@ pattern: wrap items in `<Group heading="…">` and render `<PaletteItem
 value="…" onSelect={...} icon={...} label="…" sub="…" />`. The
 `value` string drives cmdk's fuzzy match — include any aliases the user
 might type (e.g. `"action new lead"` matches both "new" and "lead").
+
+## Sparkline
+
+```tsx
+import { Sparkline } from "@/components/ui/sparkline"
+
+<Sparkline
+  data={[3, 5, 4, 7, 8, 11, 9, 14]}
+  width={96}
+  height={28}
+  className="text-primary"          // line + area inherit currentColor
+/>
+```
+
+Pure SVG, server-side renderable. Auto-scales the data range with a 2-px
+top/bottom pad so peaks don't clip. The trailing point gets a small dot
+so the endpoint stays legible. For single-point series, a faint flat
+line is drawn as a fallback so the tile still has visual weight.
+
+Pairs with `KPIStat`'s `sparkline` slot. Color the chart by setting
+`className` on the Sparkline (e.g. `text-primary`, `text-success`,
+`text-destructive`) — it inherits via `currentColor`.
+
+For time-series sources, see `src/lib/metrics.ts` (Fase 2):
+`mrrSeries`, `activeClientsSeries`, `openLeadsSeries`,
+`tasksDoneSeries`, and `deltaFromSeries` for the month-over-month
+delta chip.
 
 ## Skeleton
 

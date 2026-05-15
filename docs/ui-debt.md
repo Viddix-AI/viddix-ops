@@ -36,14 +36,6 @@ the same table. Fase 6 polish.
 **Fix**: `text-destructive` is the semantic equivalent now that
 `--destructive` carries AA contrast. Fase 6 polish.
 
-### Pipeline bars in dashboard
-
-- `src/app/(dashboard)/dashboard/page.tsx:197-206` — inline
-  `linear-gradient(180deg, rgba(79,142,247,.18) 0%, rgba(79,142,247,.5) 100%)`.
-
-**Fix**: planned rebuild as a horizontal funnel with stage-by-stage
-conversion %. Fase 2.
-
 ### `--radius` legacy variable
 
 `globals.css` still defines `--radius: 0.625rem` for shadcn compat (some
@@ -66,3 +58,6 @@ the codebase reads `var(--radius)` directly, we can drop it.
 - ✅ Lead-detail-sheet in-tab empty states → `EmptyState size="sm"` (Fase 1)
 - ✅ Topbar global search → `CommandPalette` via ⌘K (Fase 1)
 - ✅ Small uppercase labels (`text-[10px]`) gained `font-medium` weight (Fase 1)
+- ✅ Pipeline bars → horizontal `PipelineFunnel` with conversion % (Fase 2)
+- ✅ Dashboard `StatCard` inline → `KPIStat` primitive with deltas + sparklines (Fase 2)
+- ✅ Hand-rolled recent activity → `RecentActivity` from `useActivities()`, grouped by day (Fase 2)
