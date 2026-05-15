@@ -9,7 +9,6 @@ import { toast } from "sonner"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { TeamBadge } from "./team-badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,6 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { CommandPalette } from "./command-palette"
 import { useCurrentProfile } from "@/hooks/use-profile"
 import { ensureNotificationPermission } from "@/hooks/use-task-reminders"
 import { store } from "@/lib/data-store"
@@ -29,6 +29,28 @@ export function Topbar() {
   const router = useRouter()
   const me = useCurrentProfile()
   const qc = useQueryClient()
+  const [paletteOpen, setPaletteOpen] = React.useState(false)
+  // Detect Mac so the kbd hint shows ⌘ instead of Ctrl. Computed inside an
+  // effect so SSR renders a stable default (non-Mac) and the client hydrates
+  // to the real value — avoids hydration mismatch.
+  const [isMac, setIsMac] = React.useState(false)
+  React.useEffect(() => {
+    setIsMac(/Mac|iPhone|iPad/.test(navigator.userAgent))
+  }, [])
+
+  // Global ⌘K / Ctrl+K shortcut. Capture-phase listener so it wins over any
+  // focused input that might also bind cmd+k. Also handles `/` as a quick
+  // open when not already typing into a form field.
+  React.useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        setPaletteOpen((o) => !o)
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
   async function signOut() {
     try {
@@ -69,13 +91,19 @@ export function Topbar() {
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur lg:px-6">
       <MobileNav />
 
-      <div className="relative hidden flex-1 max-w-md md:block">
-        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search clients, leads, tasks…"
-          className="h-9 pl-8 bg-muted/50 border-transparent focus-visible:bg-background"
-        />
-      </div>
+      <button
+        type="button"
+        onClick={() => setPaletteOpen(true)}
+        aria-label="Open search (Command-K)"
+        className="hidden h-9 max-w-md flex-1 items-center gap-2 rounded-md bg-muted/60 px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 md:flex"
+      >
+        <Search className="size-4 shrink-0" />
+        <span className="flex-1 text-left">Search clients, leads, tasks…</span>
+        <kbd className="inline-flex h-5 items-center gap-0.5 rounded-sm border border-border bg-background px-1 font-mono text-[10px] text-text-secondary shadow-sm">
+          <span>{isMac ? "⌘" : "Ctrl"}</span>
+          <span>K</span>
+        </kbd>
+      </button>
 
       <div className="ml-auto flex items-center gap-2">
         <Button variant="ghost" size="icon-sm" aria-label="Notifications">
@@ -121,6 +149,8 @@ export function Topbar() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
     </header>
   )
 }
