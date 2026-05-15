@@ -197,7 +197,7 @@ export function PartnersView() {
 function Stat({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
       <p className={cn("font-heading text-base font-semibold tabular-nums")}>{children}</p>
     </div>
   )

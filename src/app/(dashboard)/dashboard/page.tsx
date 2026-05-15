@@ -500,7 +500,7 @@ function StatCard({
             {value}
           </p>
           {sub && (
-            <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>
+            <p className="mt-0.5 text-xs font-medium text-muted-foreground">{sub}</p>
           )}
         </div>
       </CardContent>

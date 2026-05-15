@@ -72,7 +72,7 @@ export function KPIStat({
             <p className="font-heading text-2xl font-semibold tabular-nums tracking-tight">
               {value}
             </p>
-            <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <div className="mt-0.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
               {sub}
               {trend && (
                 <span

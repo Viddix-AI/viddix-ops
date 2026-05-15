@@ -202,7 +202,7 @@ function ContactRow({
     <div className="flex items-start gap-2 text-sm">
       {icon && <span className="mt-0.5 text-muted-foreground">{icon}</span>}
       <div className="min-w-0">
-        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
           {label}
         </p>
         <p className="truncate">{value ?? "—"}</p>
@@ -368,17 +368,17 @@ function PartnersTab({ clientId, mrr }: { clientId: string; mrr: number }) {
       <CardContent className="space-y-4 py-3">
         <div className="grid grid-cols-3 gap-3 rounded-md border border-border bg-muted/30 p-3 text-sm">
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Allocated</p>
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Allocated</p>
             <p className="font-heading text-base font-semibold tabular-nums">{totalSplit}%</p>
             <p className="text-xs text-muted-foreground">{money(totalAllocated)}/mo</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">House share</p>
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">House share</p>
             <p className="font-heading text-base font-semibold tabular-nums">{remaining}%</p>
             <p className="text-xs text-muted-foreground">{money(houseShare)}/mo</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Client MRR</p>
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Client MRR</p>
             <p className="font-heading text-base font-semibold tabular-nums">{money(mrr)}</p>
             <p className="text-xs text-muted-foreground">/mo</p>
           </div>
