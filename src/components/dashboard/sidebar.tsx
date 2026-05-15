@@ -45,8 +45,8 @@ export function Sidebar() {
         </span>
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-        <p className="px-2.5 pt-2 pb-1 text-[10px] font-semibold tracking-wider text-sidebar-foreground/50 uppercase">
+      <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
+        <p className="px-2.5 pt-2 pb-1.5 text-[10px] font-semibold tracking-wider text-sidebar-foreground/70 uppercase">
           Workspace
         </p>
         {NAV_ITEMS.map((item) => {
@@ -58,11 +58,13 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              aria-current={active ? "page" : undefined}
               className={cn(
-                "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
+                "relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors duration-150",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
                 active
-                  ? "bg-white/[0.06] text-white"
-                  : "text-sidebar-foreground/80 hover:bg-white/[0.04] hover:text-white"
+                  ? "bg-sidebar-accent text-white before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-0.5 before:rounded-full before:bg-sidebar-primary"
+                  : "text-sidebar-foreground/85 hover:bg-white/[0.05] hover:text-white"
               )}
             >
               <Icon className="size-4 shrink-0" />
