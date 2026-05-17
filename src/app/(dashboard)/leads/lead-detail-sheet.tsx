@@ -23,6 +23,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs"
 import { EditableTaskRow } from "@/components/dashboard/editable-task-row"
+import { EmptyState } from "@/components/dashboard/empty-state"
 import { TeamBadge } from "@/components/dashboard/team-badge"
 import { useCreateNote, useNotesFor } from "@/hooks/use-notes"
 import { useCreateTask, useTasks } from "@/hooks/use-tasks"
@@ -327,7 +328,11 @@ function Inner({
               </div>
             </div>
             {notes.length === 0 ? (
-              <p className="py-4 text-center text-xs text-muted-foreground">No notes yet</p>
+              <EmptyState
+                size="sm"
+                title="No notes yet"
+                description="Anything you log here stays on the lead."
+              />
             ) : (
               <ul className="space-y-2">
                 {notes.map((n) => {
@@ -368,7 +373,7 @@ function Inner({
                       {
                         title: taskTitle.trim(),
                         lead_id: lead.id,
-                        assignee_id: lead.owner_id ?? me.id,
+                        assignee_ids: [lead.owner_id ?? me.id],
                         due_date: taskDue || null,
                       },
                       {
@@ -386,7 +391,11 @@ function Inner({
               </div>
             </div>
             {leadTasks.length === 0 ? (
-              <p className="py-4 text-center text-xs text-muted-foreground">No tasks yet</p>
+              <EmptyState
+                size="sm"
+                title="No tasks yet"
+                description="Create one above to track follow-ups."
+              />
             ) : (
               <ul className="space-y-2">
                 {leadTasks.map((t) => (

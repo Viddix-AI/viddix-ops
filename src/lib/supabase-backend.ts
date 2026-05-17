@@ -306,6 +306,21 @@ export const supabaseBackend: Backend = {
     if (r.error) throw new Error(`Supabase: updateClient — ${r.error.message}`)
     return r.data as Client
   },
+  async deleteClient(id) {
+    // Postgres handles the cascade rules declared in 001_init.sql /
+    // 002_partners_temperature.sql; we just issue the delete + log it.
+    const r = await db().from("clients").delete().eq("id", id)
+    if (r.error) throw new Error(`Supabase: deleteClient — ${r.error.message}`)
+    logActivity({
+      kind: "client_deleted",
+      message: "Client deleted",
+      lead_id: null,
+      client_id: id,
+      partner_id: null,
+      task_id: null,
+      actor_id: null,
+    })
+  },
 
   // ── tasks ────────────────────────────────────────────────────────────────
   async createTask(input) {
@@ -317,7 +332,8 @@ export const supabaseBackend: Backend = {
         due_date: input.due_date ?? null,
         priority: input.priority ?? "medium",
         status: input.status ?? "todo",
-        assignee_id: input.assignee_id ?? null,
+        assignee_ids: input.assignee_ids ?? [],
+        link: input.link ?? null,
         client_id: input.client_id ?? null,
         lead_id: input.lead_id ?? null,
       })

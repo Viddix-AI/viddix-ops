@@ -19,7 +19,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import { TeamBadge } from "@/components/dashboard/team-badge"
 import { useCreateLead } from "@/hooks/use-leads"
+import { usePartners } from "@/hooks/use-partners"
+import { useProfiles } from "@/hooks/use-profile"
 import {
   LEAD_STAGES,
   LEAD_TEMPERATURES,
@@ -36,6 +39,10 @@ const SOURCES = [
   { value: "event", label: "Event" },
 ]
 
+// Sentinel for "no selection" on the Select primitives, since base-ui's Select
+// can't take "" as a real item value.
+const NONE = "__none__"
+
 type Form = {
   name: string
   company: string
@@ -47,6 +54,9 @@ type Form = {
   temperature: LeadTemperature
   value: string
   notes: string
+  owner_id: string
+  partner_id: string
+  partner_split_pct: number
 }
 
 const EMPTY: Form = {
@@ -60,6 +70,9 @@ const EMPTY: Form = {
   temperature: "warm",
   value: "",
   notes: "",
+  owner_id: "",
+  partner_id: "",
+  partner_split_pct: 0,
 }
 
 export function AddLeadSheet({
@@ -71,6 +84,8 @@ export function AddLeadSheet({
 }) {
   const [form, setForm] = React.useState<Form>(EMPTY)
   const create = useCreateLead()
+  const { data: profiles = [] } = useProfiles()
+  const { data: partners = [] } = usePartners()
 
   function set<K extends keyof Form>(key: K, value: Form[K]) {
     setForm((f) => ({ ...f, [key]: value }))
@@ -79,6 +94,19 @@ export function AddLeadSheet({
   function handleOpenChange(o: boolean) {
     if (!o) setForm(EMPTY)
     onOpenChange(o)
+  }
+
+  function handlePartnerChange(partnerId: string | null) {
+    if (!partnerId || partnerId === NONE) {
+      setForm((f) => ({ ...f, partner_id: "", partner_split_pct: 0 }))
+      return
+    }
+    const partner = partners.find((p) => p.id === partnerId)
+    setForm((f) => ({
+      ...f,
+      partner_id: partnerId,
+      partner_split_pct: partner?.default_split_pct ?? f.partner_split_pct,
+    }))
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -96,6 +124,11 @@ export function AddLeadSheet({
         temperature: form.temperature,
         value: Number(form.value) || 0,
         notes: form.notes.trim() || null,
+        owner_id: form.owner_id || null,
+        partner_id: form.partner_id || null,
+        partner_split_pct: form.partner_id
+          ? Math.max(0, Math.min(100, Number(form.partner_split_pct) || 0))
+          : 0,
       },
       {
         onSuccess: () => {
@@ -190,6 +223,65 @@ export function AddLeadSheet({
                 </Select>
               </Field>
             </div>
+            <Field label="Owner">
+              <Select
+                value={form.owner_id || NONE}
+                onValueChange={(v) => set("owner_id", v === NONE ? "" : (v ?? ""))}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Unassigned" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>
+                    <span className="text-text-tertiary">Unassigned</span>
+                  </SelectItem>
+                  {profiles.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      <span className="inline-flex items-center gap-1.5">
+                        {p.full_name}
+                        <TeamBadge team={p.team} />
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <div className="grid grid-cols-[1fr_auto] gap-3">
+              <Field label="Partner">
+                <Select
+                  value={form.partner_id || NONE}
+                  onValueChange={handlePartnerChange}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="None" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>
+                      <span className="text-text-tertiary">None</span>
+                    </SelectItem>
+                    {partners.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Split %">
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={form.partner_split_pct}
+                  onChange={(e) =>
+                    set("partner_split_pct", Number(e.target.value) || 0)
+                  }
+                  disabled={!form.partner_id}
+                  className="w-20"
+                />
+              </Field>
+            </div>
             <Field label="Temperature">
               <div className="flex gap-1.5">
                 {LEAD_TEMPERATURES.map((t) => {
@@ -250,7 +342,7 @@ export function AddLeadSheet({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-xs font-medium text-foreground/80">{label}</span>
+      <span className="text-xs font-medium text-text-secondary">{label}</span>
       {children}
     </label>
   )

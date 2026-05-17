@@ -5,13 +5,35 @@ import {
   DragDropContext,
   Draggable,
   Droppable,
+  type DraggableProvided,
+  type DraggableStateSnapshot,
   type DropResult,
 } from "@hello-pangea/dnd"
-import { Download, Plus, Search, Sparkles, Upload } from "lucide-react"
+import {
+  CalendarClock,
+  Download,
+  GripVertical,
+  Plus,
+  RotateCcw,
+  Search,
+  Sparkles,
+  Thermometer,
+  Upload,
+  Users,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Pill } from "@/components/ui/pill"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { UserAvatar } from "@/components/dashboard/user-avatar"
@@ -24,8 +46,9 @@ import {
   useUpdateLead,
 } from "@/hooks/use-leads"
 import { useProfiles } from "@/hooks/use-profile"
+import { useTasks } from "@/hooks/use-tasks"
 import { downloadCsv, parseCsv, pickCsvFile, toCsv } from "@/lib/csv"
-import { money } from "@/lib/format"
+import { money, relativeDay } from "@/lib/format"
 import {
   LEAD_STAGES,
   LEAD_TEMPERATURES,
@@ -33,6 +56,7 @@ import {
   type Lead,
   type LeadStage,
   type LeadTemperature,
+  type Profile,
   type Team,
 } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -40,13 +64,27 @@ import { LeadDetailSheet } from "./lead-detail-sheet"
 import { AddLeadSheet } from "./add-lead-sheet"
 
 export function LeadsBoard() {
-  const { data: leads = [] } = useLeads()
+  const { data: leads = [], isFetching, isSuccess } = useLeads()
+  const isInitialLoad = isFetching && !isSuccess && leads.length === 0
   const { data: profiles = [] } = useProfiles()
+  const { data: tasks = [] } = useTasks()
   const move = useMoveLead()
   const remove = useDeleteLead()
   const update = useUpdateLead()
   const convert = useConvertLead()
   const create = useCreateLead()
+
+  // Earliest open due-date per lead, surfaced as a small pill on the card.
+  // Memoized so we don't iterate tasks N times during the kanban render.
+  const leadDueMap = React.useMemo(() => {
+    const out = new Map<string, string>()
+    for (const t of tasks) {
+      if (!t.lead_id || t.status === "done" || !t.due_date) continue
+      const cur = out.get(t.lead_id)
+      if (!cur || t.due_date < cur) out.set(t.lead_id, t.due_date)
+    }
+    return out
+  }, [tasks])
 
   const [openAdd, setOpenAdd] = React.useState(false)
   const [activeLeadId, setActiveLeadId] = React.useState<string | null>(null)
@@ -128,7 +166,8 @@ export function LeadsBoard() {
   return (
     <>
       <PageHeader
-        title="Leads"
+        eyebrow="HOLDING · PIPELINE"
+        title="Pipeline"
         description="Drag cards to move leads through the pipeline."
         actions={
           <div className="flex items-center gap-2">
@@ -170,198 +209,114 @@ export function LeadsBoard() {
       />
 
       <div className="px-4 py-5 lg:px-6">
-        <div className="mb-3 relative max-w-sm">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search leads by name, company, email…"
-            className="h-9 pl-8"
-          />
-        </div>
-        <div className="mb-4 flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            Temperature
-          </span>
-          <button
-            type="button"
-            onClick={() => setTempFilter("all")}
-            className={cn(
-              "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
-              tempFilter === "all"
-                ? "border-foreground bg-foreground text-background"
-                : "border-border bg-background text-muted-foreground hover:text-foreground"
-            )}
-          >
-            All · {leads.length}
-          </button>
-          {LEAD_TEMPERATURES.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTempFilter(t.id)}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
-                tempFilter === t.id
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-border bg-background text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <span className={cn("size-2 rounded-full", t.dot)} />
-              {t.label} · {tempCounts[t.id]}
-            </button>
-          ))}
-        </div>
-
-        <div className="mb-4 flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            Team
-          </span>
-          <button
-            type="button"
-            onClick={() => setTeamFilter("all")}
-            className={cn(
-              "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
-              teamFilter === "all"
-                ? "border-foreground bg-foreground text-background"
-                : "border-border bg-background text-muted-foreground hover:text-foreground"
-            )}
-          >
-            All · {leads.length}
-          </button>
-          {TEAMS.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTeamFilter(t.id)}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
-                teamFilter === t.id
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-border bg-background text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <span className={cn("size-2 rounded-full", t.id === "madrid" ? "bg-blue-500" : "bg-emerald-500")} />
-              {t.label} · {teamCounts[t.id]}
-            </button>
-          ))}
-        </div>
+        <FilterBar
+          search={search}
+          onSearch={setSearch}
+          tempFilter={tempFilter}
+          onTempFilter={setTempFilter}
+          tempCounts={tempCounts}
+          teamFilter={teamFilter}
+          onTeamFilter={setTeamFilter}
+          teamCounts={teamCounts}
+          totalLeads={leads.length}
+        />
+        {isInitialLoad && <LeadsBoardSkeleton />}
+        {!isInitialLoad && (
         <DragDropContext onDragEnd={onDragEnd}>
-          <div className="flex gap-3 overflow-x-auto pb-4">
-            {LEAD_STAGES.map((stage) => {
-              const items = byStage[stage.id]
-              const total = items.reduce(
-                (s, l) => s + Number(l.value || 0),
-                0
-              )
-              return (
-                <div
-                  key={stage.id}
-                  className="flex w-[280px] shrink-0 flex-col rounded-xl bg-muted/40 ring-1 ring-border"
-                >
-                  <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={cn(
-                          "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                          stage.tone
-                        )}
-                      >
-                        {stage.label}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {items.length}
-                      </span>
-                    </div>
-                    <span className="text-[11px] tabular-nums text-muted-foreground">
-                      {money(total)}
-                    </span>
-                  </div>
-
-                  <Droppable droppableId={stage.id}>
-                    {(provided, snapshot) => (
-                      <div
-                        ref={provided.innerRef}
-                        {...provided.droppableProps}
-                        className={cn(
-                          "flex-1 space-y-2 p-2 transition-colors",
-                          snapshot.isDraggingOver && "bg-accent/40"
-                        )}
-                      >
-                        {items.length === 0 && !snapshot.isDraggingOver && (
-                          <div className="rounded-md border border-dashed border-border p-3 text-center text-[11px] text-muted-foreground">
-                            Drop leads here
-                          </div>
-                        )}
-                        {items.map((lead, i) => (
-                          <Draggable
-                            key={lead.id}
-                            draggableId={lead.id}
-                            index={i}
-                          >
-                            {(p, s) => (
-                              <article
-                                ref={p.innerRef}
-                                {...p.draggableProps}
-                                {...p.dragHandleProps}
-                                onClick={() => setActiveLeadId(lead.id)}
-                                className={cn(
-                                  "cursor-pointer rounded-lg border border-border bg-background p-3 text-left shadow-sm transition-shadow hover:shadow-md",
-                                  s.isDragging && "shadow-lg ring-1 ring-primary/30"
-                                )}
-                              >
-                                <div className="flex items-center gap-1.5">
-                                  <span
-                                    className={cn(
-                                      "size-2 shrink-0 rounded-full",
-                                      LEAD_TEMPERATURES.find(
-                                        (t) => t.id === lead.temperature
-                                      )?.dot ?? "bg-slate-300"
-                                    )}
-                                    title={`${lead.temperature} lead`}
-                                  />
-                                  <p className="font-medium leading-snug truncate">
-                                    {lead.name}
-                                  </p>
-                                </div>
-                                {lead.company && (
-                                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                    {lead.company}
-                                  </p>
-                                )}
-                                <div className="mt-2.5 flex items-center justify-between">
-                                  <span className="text-xs font-semibold tabular-nums text-foreground">
-                                    {money(Number(lead.value || 0))}
-                                    <span className="ml-0.5 text-[10px] font-normal text-muted-foreground">
-                                      /mo
-                                    </span>
-                                  </span>
-                                  <UserAvatar
-                                    profile={
-                                      profiles.find(
-                                        (p) => p.id === lead.owner_id
-                                      ) ?? null
-                                    }
-                                    size="sm"
-                                  />
-                                </div>
-                              </article>
-                            )}
-                          </Draggable>
-                        ))}
-                        {provided.placeholder}
+          <div className="relative">
+            {/* Edge fades so the user spots there's more pipeline beyond the
+              * viewport. pointer-events-none so they don't intercept drags. */}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-background to-transparent"
+            />
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-gradient-to-l from-background to-transparent"
+            />
+            <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-4 sm:snap-none">
+              {LEAD_STAGES.map((stage) => {
+                const items = byStage[stage.id]
+                const total = items.reduce(
+                  (s, l) => s + Number(l.value || 0),
+                  0
+                )
+                return (
+                  <div
+                    key={stage.id}
+                    className="flex w-[284px] shrink-0 snap-start flex-col rounded-[var(--radius-lg)] bg-surface-3/40 ring-1 ring-border-subtle"
+                  >
+                    <div className="flex flex-col gap-1.5 border-b border-border-subtle px-3 py-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-text-tertiary">
+                          {stage.label}
+                        </p>
+                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-primary/30 px-1.5 font-mono text-[10px] tabular-nums text-primary">
+                          {items.length}
+                        </span>
                       </div>
-                    )}
-                  </Droppable>
+                      <p className="font-display text-[22px] leading-none tracking-[-0.02em] tabular-nums text-text-primary">
+                        {money(total)}
+                        <span className="ml-0.5 font-sans text-[10px] font-medium text-text-tertiary">
+                          /mo
+                        </span>
+                      </p>
+                    </div>
 
-                  <QuickAddLead stage={stage.id} />
-                </div>
-              )
-            })}
+                    <Droppable droppableId={stage.id}>
+                      {(provided, snapshot) => (
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.droppableProps}
+                          className={cn(
+                            "flex-1 space-y-2 p-2 transition-colors",
+                            snapshot.isDraggingOver && "bg-accent/50"
+                          )}
+                        >
+                          {items.length === 0 && !snapshot.isDraggingOver && (
+                            <div className="rounded-md border border-dashed border-border-subtle p-3 text-center text-[11px] font-medium text-text-tertiary">
+                              Drop leads here
+                            </div>
+                          )}
+                          {items.map((lead, i) => (
+                            <Draggable
+                              key={lead.id}
+                              draggableId={lead.id}
+                              index={i}
+                            >
+                              {(p, s) => (
+                                <LeadCard
+                                  innerRef={p.innerRef}
+                                  draggableProps={p.draggableProps}
+                                  dragHandleProps={p.dragHandleProps}
+                                  isDragging={s.isDragging}
+                                  lead={lead}
+                                  owner={
+                                    profiles.find(
+                                      (p) => p.id === lead.owner_id
+                                    ) ?? null
+                                  }
+                                  dueDate={leadDueMap.get(lead.id) ?? null}
+                                  onOpen={() => setActiveLeadId(lead.id)}
+                                />
+                              )}
+                            </Draggable>
+                          ))}
+                          {provided.placeholder}
+                        </div>
+                      )}
+                    </Droppable>
+
+                    <QuickAddLead stage={stage.id} />
+                  </div>
+                )
+              })}
+            </div>
           </div>
         </DragDropContext>
+        )}
 
-        {leads.length === 0 && (
+        {!isInitialLoad && leads.length === 0 && (
           <EmptyState
             icon={<Sparkles className="size-4" />}
             title="No leads yet"
@@ -406,6 +361,250 @@ export function LeadsBoard() {
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// FilterBar — unified Search + Temperature + Team + Reset
+// ─────────────────────────────────────────────────────────────────────────
+
+function FilterBar({
+  search,
+  onSearch,
+  tempFilter,
+  onTempFilter,
+  tempCounts,
+  teamFilter,
+  onTeamFilter,
+  teamCounts,
+  totalLeads,
+}: {
+  search: string
+  onSearch: (v: string) => void
+  tempFilter: LeadTemperature | "all"
+  onTempFilter: (v: LeadTemperature | "all") => void
+  tempCounts: Record<LeadTemperature, number>
+  teamFilter: Team | "all"
+  onTeamFilter: (v: Team | "all") => void
+  teamCounts: Record<Team, number>
+  totalLeads: number
+}) {
+  const anyActive =
+    tempFilter !== "all" || teamFilter !== "all" || search.trim().length > 0
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="relative max-w-sm flex-1">
+        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-text-tertiary" />
+        <Input
+          value={search}
+          onChange={(e) => onSearch(e.target.value)}
+          placeholder="Search leads by name, company, email…"
+          className="h-9 pl-8"
+        />
+      </div>
+
+      <Select
+        value={tempFilter}
+        onValueChange={(v) => onTempFilter(v as LeadTemperature | "all")}
+      >
+        <SelectTrigger size="sm" className="w-44">
+          <Thermometer className="size-3.5 text-muted-foreground" />
+          <SelectValue placeholder="All temperatures" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All temperatures · {totalLeads}</SelectItem>
+          {LEAD_TEMPERATURES.map((t) => (
+            <SelectItem key={t.id} value={t.id}>
+              <span className="inline-flex items-center gap-2">
+                <span className={cn("size-2 rounded-full", t.dot)} />
+                {t.label}
+                <span className="text-text-tertiary">·</span>
+                <span className="text-text-secondary">{tempCounts[t.id]}</span>
+              </span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={teamFilter}
+        onValueChange={(v) => onTeamFilter(v as Team | "all")}
+      >
+        <SelectTrigger size="sm" className="w-40">
+          <Users className="size-3.5 text-muted-foreground" />
+          <SelectValue placeholder="All teams" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All teams · {totalLeads}</SelectItem>
+          {TEAMS.map((t) => (
+            <SelectItem key={t.id} value={t.id}>
+              <span className="inline-flex items-center gap-2">
+                <span className={cn("size-2 rounded-full", t.dot)} />
+                {t.label}
+                <span className="text-text-tertiary">·</span>
+                <span className="text-text-secondary">{teamCounts[t.id]}</span>
+              </span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {anyActive && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            onSearch("")
+            onTempFilter("all")
+            onTeamFilter("all")
+          }}
+        >
+          <RotateCcw />
+          Reset
+        </Button>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// LeadCard — single draggable card with temperature pill, due-date, grip
+// ─────────────────────────────────────────────────────────────────────────
+
+function LeadCard({
+  innerRef,
+  draggableProps,
+  dragHandleProps,
+  isDragging,
+  lead,
+  owner,
+  dueDate,
+  onOpen,
+}: {
+  innerRef: DraggableProvided["innerRef"]
+  draggableProps: DraggableProvided["draggableProps"]
+  dragHandleProps: DraggableProvided["dragHandleProps"]
+  isDragging: DraggableStateSnapshot["isDragging"]
+  lead: Lead
+  owner: Profile | null
+  dueDate: string | null
+  onOpen: () => void
+}) {
+  const temp = LEAD_TEMPERATURES.find((t) => t.id === lead.temperature)
+  // Overdue gets a danger tone; due today/tomorrow is warning; everything
+  // else is neutral. Matches the convention in the priority badge family.
+  const dueTone: "danger" | "warning" | "neutral" = React.useMemo(() => {
+    if (!dueDate) return "neutral"
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const d = new Date(dueDate)
+    d.setHours(0, 0, 0, 0)
+    const diffDays = Math.round((d.getTime() - today.getTime()) / 86_400_000)
+    if (diffDays < 0) return "danger"
+    if (diffDays <= 1) return "warning"
+    return "neutral"
+  }, [dueDate])
+
+  return (
+    <article
+      ref={innerRef}
+      {...draggableProps}
+      {...dragHandleProps}
+      onClick={onOpen}
+      className={cn(
+        "group/lead relative cursor-pointer rounded-[var(--radius-md)] border border-border-subtle bg-card p-3 pl-5 text-left shadow-[var(--shadow-paper-sm)] transition-[transform,box-shadow] duration-150 ease-[cubic-bezier(.2,.6,.2,1)] hover:-translate-y-px hover:shadow-[var(--shadow-paper-md)]",
+        isDragging && "rotate-[1.5deg] shadow-[var(--shadow-paper-lg)] ring-1 ring-primary/30"
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute top-2 left-1 text-text-tertiary transition-opacity",
+          isDragging
+            ? "opacity-100"
+            : "opacity-0 group-hover/lead:opacity-100"
+        )}
+      >
+        <GripVertical className="size-3.5" />
+      </span>
+
+      <div className="flex items-start justify-between gap-2">
+        <p className="truncate text-[14px] font-medium leading-snug text-text-primary">
+          {lead.name}
+        </p>
+        {temp && (
+          <Pill tone={temp.pillTone} size="sm" dot className="shrink-0">
+            {temp.label}
+          </Pill>
+        )}
+      </div>
+      {lead.company && (
+        <p className="mt-0.5 truncate text-xs font-medium text-text-tertiary">
+          {lead.company}
+        </p>
+      )}
+
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <span className="font-mono text-[12px] tabular-nums text-text-primary">
+          {money(Number(lead.value || 0))}
+          <span className="ml-0.5 font-sans text-[10px] font-medium text-text-tertiary">
+            /mo
+          </span>
+        </span>
+        <UserAvatar profile={owner} size="sm" />
+      </div>
+
+      {dueDate && (
+        <div className="mt-2 -mb-0.5 flex items-center gap-1.5">
+          <Pill
+            variant={dueTone === "neutral" ? "neutral" : dueTone}
+            size="sm"
+            className="gap-1"
+          >
+            <CalendarClock className="size-3" />
+            {relativeDay(dueDate)}
+          </Pill>
+        </div>
+      )}
+    </article>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Skeleton — shown while the very first leads fetch is in flight
+// ─────────────────────────────────────────────────────────────────────────
+
+function LeadsBoardSkeleton() {
+  return (
+    <div className="flex gap-3 overflow-hidden px-1 pb-4">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div
+          key={i}
+          className="flex w-[284px] shrink-0 flex-col rounded-[var(--radius-lg)] bg-surface-3/40 ring-1 ring-border-subtle"
+        >
+          <div className="flex flex-col gap-1.5 border-b border-border-subtle px-3 py-3">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="h-6 w-24" />
+          </div>
+          <div className="space-y-2 p-2">
+            {Array.from({ length: 3 - (i % 2) }).map((_, j) => (
+              <div
+                key={j}
+                className="space-y-2 rounded-[var(--radius-md)] border border-border-subtle bg-card p-3"
+              >
+                <Skeleton className="h-3 w-32" />
+                <Skeleton className="h-2.5 w-20" />
+                <div className="flex items-center justify-between pt-1">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="size-6 rounded-full" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function QuickAddLead({ stage }: { stage: LeadStage }) {
   // Per-column inline composer. Just a name field — everything else gets
   // sensible defaults so capturing a lead is one keystroke + Enter. Open the
@@ -442,7 +641,7 @@ function QuickAddLead({ stage }: { stage: LeadStage }) {
           // Focus on next paint when the input mounts.
           requestAnimationFrame(() => inputRef.current?.focus())
         }}
-        className="m-2 mt-0 flex items-center justify-center gap-1.5 rounded-md border border-dashed border-border px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
+        className="m-2 mt-0 flex items-center justify-center gap-1.5 rounded-md border border-dashed border-border-default px-2 py-1.5 text-xs text-text-tertiary transition-colors hover:border-text-secondary hover:text-text-secondary"
       >
         <Plus className="size-3.5" />
         Add lead
@@ -451,7 +650,7 @@ function QuickAddLead({ stage }: { stage: LeadStage }) {
   }
 
   return (
-    <div className="m-2 mt-0 space-y-1.5 rounded-md border border-border bg-background p-2">
+    <div className="m-2 mt-0 space-y-1.5 rounded-md border border-border-subtle bg-card p-2">
       <Input
         ref={inputRef}
         value={name}

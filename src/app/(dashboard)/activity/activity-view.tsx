@@ -18,6 +18,7 @@ import {
 } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Pill, type PillTone } from "@/components/ui/pill"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { useActivities } from "@/hooks/use-activities"
@@ -26,30 +27,31 @@ import { initials, relativeDay } from "@/lib/format"
 import type { Activity, ActivityKind } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
-const ICONS: Record<ActivityKind, { icon: LucideIcon; tone: string }> = {
-  lead_created:     { icon: Sparkles,  tone: "bg-blue-100 text-blue-700" },
-  lead_updated:     { icon: Pencil,    tone: "bg-slate-100 text-slate-700" },
-  lead_deleted:     { icon: Trash2,    tone: "bg-rose-100 text-rose-700" },
-  lead_converted:   { icon: ArrowRight, tone: "bg-emerald-100 text-emerald-700" },
-  lead_moved:       { icon: Move,      tone: "bg-indigo-100 text-indigo-700" },
-  client_created:   { icon: Briefcase, tone: "bg-emerald-100 text-emerald-700" },
-  client_updated:   { icon: Pencil,    tone: "bg-slate-100 text-slate-700" },
-  task_created:     { icon: CheckSquare, tone: "bg-amber-100 text-amber-800" },
-  task_updated:     { icon: Pencil,    tone: "bg-slate-100 text-slate-700" },
-  task_deleted:     { icon: Trash2,    tone: "bg-rose-100 text-rose-700" },
-  partner_created:  { icon: Handshake, tone: "bg-violet-100 text-violet-700" },
-  partner_updated:  { icon: Pencil,    tone: "bg-slate-100 text-slate-700" },
-  partner_deleted:  { icon: Trash2,    tone: "bg-rose-100 text-rose-700" },
-  partner_attached: { icon: Plus,      tone: "bg-violet-100 text-violet-700" },
-  partner_detached: { icon: Trash2,    tone: "bg-slate-100 text-slate-700" },
-  note_created:     { icon: Mail,      tone: "bg-sky-100 text-sky-700" },
-  event_created:    { icon: CheckSquare, tone: "bg-blue-100 text-blue-700" },
-  demo_reset:       { icon: RotateCcw, tone: "bg-amber-100 text-amber-800" },
+const ICONS: Record<ActivityKind, { icon: LucideIcon; tone: PillTone }> = {
+  lead_created:     { icon: Sparkles,    tone: "blue" },
+  lead_updated:     { icon: Pencil,      tone: "slate" },
+  lead_deleted:     { icon: Trash2,      tone: "rose" },
+  lead_converted:   { icon: ArrowRight,  tone: "emerald" },
+  lead_moved:       { icon: Move,        tone: "indigo" },
+  client_created:   { icon: Briefcase,   tone: "emerald" },
+  client_updated:   { icon: Pencil,      tone: "slate" },
+  client_deleted:   { icon: Trash2,      tone: "rose" },
+  task_created:     { icon: CheckSquare, tone: "amber" },
+  task_updated:     { icon: Pencil,      tone: "slate" },
+  task_deleted:     { icon: Trash2,      tone: "rose" },
+  partner_created:  { icon: Handshake,   tone: "violet" },
+  partner_updated:  { icon: Pencil,      tone: "slate" },
+  partner_deleted:  { icon: Trash2,      tone: "rose" },
+  partner_attached: { icon: Plus,        tone: "violet" },
+  partner_detached: { icon: Trash2,      tone: "slate" },
+  note_created:     { icon: Mail,        tone: "sky" },
+  event_created:    { icon: CheckSquare, tone: "blue" },
+  demo_reset:       { icon: RotateCcw,   tone: "amber" },
 }
 
 const FILTERS: { id: "all" | "leads" | "clients" | "tasks" | "partners"; label: string }[] = [
   { id: "all",      label: "All" },
-  { id: "leads",    label: "Leads" },
+  { id: "leads",    label: "Pipeline" },
   { id: "clients",  label: "Clients" },
   { id: "tasks",    label: "Tasks" },
   { id: "partners", label: "Partners" },
@@ -103,6 +105,7 @@ export function ActivityView() {
   return (
     <>
       <PageHeader
+        eyebrow="HOLDING · LOG"
         title="Activity"
         description={`${activities.length} events tracked across the workspace`}
       />
@@ -135,7 +138,7 @@ export function ActivityView() {
           <div className="space-y-6">
             {grouped.map(([day, items]) => (
               <section key={day}>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <h3 className="mb-2 font-mono text-[11px] uppercase tracking-[0.18em] text-text-tertiary">
                   {relativeDay(day)}
                 </h3>
                 <ul className="space-y-2">
@@ -144,15 +147,14 @@ export function ActivityView() {
                     const actor = profiles.find((p) => p.id === a.actor_id)
                     const href = hrefFor(a)
                     const inner = (
-                      <div className="flex items-start gap-3 rounded-md border border-border bg-background p-3">
-                        <span
-                          className={cn(
-                            "grid size-8 shrink-0 place-items-center rounded-md",
-                            tone
-                          )}
+                      <div className="flex items-center gap-3 rounded-md border border-border-subtle bg-card p-3">
+                        <Pill
+                          tone={tone}
+                          size="md"
+                          className="h-8 w-8 justify-center px-0"
                         >
-                          <Icon className="size-4" />
-                        </span>
+                          <Icon className="size-3.5" />
+                        </Pill>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium leading-snug">{a.message}</p>
                           <p className="mt-0.5 text-[11px] text-muted-foreground">

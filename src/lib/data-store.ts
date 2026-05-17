@@ -87,7 +87,19 @@ function read(): DB {
         partner_split_pct: l.partner_split_pct ?? 0,
         converted_client_id: l.converted_client_id ?? null,
       })),
-      tasks:           parsed.tasks           ?? fresh.tasks,
+      tasks:           (parsed.tasks ?? fresh.tasks).map((t) => {
+        // Migrate legacy single-assignee rows to the new array shape. We
+        // accept either `assignee_ids` (new) or `assignee_id` (legacy) and
+        // emit a normalized array so consumers don't need a fallback.
+        const legacy = (t as Task & { assignee_id?: string | null })
+          .assignee_id
+        const ids = Array.isArray(t.assignee_ids)
+          ? t.assignee_ids
+          : legacy
+          ? [legacy]
+          : []
+        return { ...t, assignee_ids: ids, link: t.link ?? null }
+      }),
       events:          parsed.events          ?? fresh.events,
       notes:           parsed.notes           ?? fresh.notes,
       partners:        parsed.partners        ?? fresh.partners,
@@ -362,6 +374,32 @@ const localStore = {
     return c
   },
 
+  deleteClient(id: string) {
+    const db = read()
+    const c = db.clients.find((x) => x.id === id)
+    if (!c) return
+    // Mirror the SQL cascades from 001_init.sql + 002_partners_temperature.sql:
+    //   client_partners ON DELETE CASCADE      → remove links
+    //   notes           ON DELETE CASCADE      → remove notes
+    //   tasks.client_id ON DELETE SET NULL     → null out the FK
+    //   events.client_id ON DELETE SET NULL    → null out the FK
+    //   leads.converted_client_id ON DELETE SET NULL → null out
+    db.clients = db.clients.filter((x) => x.id !== id)
+    db.client_partners = db.client_partners.filter((cp) => cp.client_id !== id)
+    db.notes = db.notes.filter((n) => n.client_id !== id)
+    db.tasks = db.tasks.map((t) =>
+      t.client_id === id ? { ...t, client_id: null } : t
+    )
+    db.events = db.events.map((e) =>
+      e.client_id === id ? { ...e, client_id: null } : e
+    )
+    db.leads = db.leads.map((l) =>
+      l.converted_client_id === id ? { ...l, converted_client_id: null } : l
+    )
+    record(db, "client_deleted", `${c.name} deleted`, { client_id: id })
+    write(db)
+  },
+
   // ── tasks ────────────────────────────────────────────────────────────────
   createTask(input: Partial<Task> & { title: string }): Task {
     const db = read()
@@ -372,7 +410,8 @@ const localStore = {
       due_date: input.due_date ?? null,
       priority: input.priority ?? "medium",
       status: input.status ?? "todo",
-      assignee_id: input.assignee_id ?? null,
+      assignee_ids: input.assignee_ids ?? [],
+      link: input.link ?? null,
       client_id: input.client_id ?? null,
       lead_id: input.lead_id ?? null,
       created_at: now(),
