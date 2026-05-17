@@ -51,7 +51,7 @@ const ICONS: Record<ActivityKind, { icon: LucideIcon; tone: PillTone }> = {
 
 const FILTERS: { id: "all" | "leads" | "clients" | "tasks" | "partners"; label: string }[] = [
   { id: "all",      label: "All" },
-  { id: "leads",    label: "Leads" },
+  { id: "leads",    label: "Pipeline" },
   { id: "clients",  label: "Clients" },
   { id: "tasks",    label: "Tasks" },
   { id: "partners", label: "Partners" },
@@ -138,7 +138,7 @@ export function ActivityView() {
           <div className="space-y-6">
             {grouped.map(([day, items]) => (
               <section key={day}>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <h3 className="mb-2 font-mono text-[11px] uppercase tracking-[0.18em] text-text-tertiary">
                   {relativeDay(day)}
                 </h3>
                 <ul className="space-y-2">
@@ -147,7 +147,7 @@ export function ActivityView() {
                     const actor = profiles.find((p) => p.id === a.actor_id)
                     const href = hrefFor(a)
                     const inner = (
-                      <div className="flex items-start gap-3 rounded-md border border-border bg-background p-3">
+                      <div className="flex items-center gap-3 rounded-md border border-border-subtle bg-card p-3">
                         <Pill tone={tone} size="md" className="h-8 w-8 px-0">
                           <Icon className="size-3.5" />
                         </Pill>

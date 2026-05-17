@@ -87,7 +87,19 @@ function read(): DB {
         partner_split_pct: l.partner_split_pct ?? 0,
         converted_client_id: l.converted_client_id ?? null,
       })),
-      tasks:           parsed.tasks           ?? fresh.tasks,
+      tasks:           (parsed.tasks ?? fresh.tasks).map((t) => {
+        // Migrate legacy single-assignee rows to the new array shape. We
+        // accept either `assignee_ids` (new) or `assignee_id` (legacy) and
+        // emit a normalized array so consumers don't need a fallback.
+        const legacy = (t as Task & { assignee_id?: string | null })
+          .assignee_id
+        const ids = Array.isArray(t.assignee_ids)
+          ? t.assignee_ids
+          : legacy
+          ? [legacy]
+          : []
+        return { ...t, assignee_ids: ids }
+      }),
       events:          parsed.events          ?? fresh.events,
       notes:           parsed.notes           ?? fresh.notes,
       partners:        parsed.partners        ?? fresh.partners,
@@ -398,7 +410,7 @@ const localStore = {
       due_date: input.due_date ?? null,
       priority: input.priority ?? "medium",
       status: input.status ?? "todo",
-      assignee_id: input.assignee_id ?? null,
+      assignee_ids: input.assignee_ids ?? [],
       client_id: input.client_id ?? null,
       lead_id: input.lead_id ?? null,
       created_at: now(),

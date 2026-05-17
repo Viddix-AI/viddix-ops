@@ -373,7 +373,7 @@ function Inner({
                       {
                         title: taskTitle.trim(),
                         lead_id: lead.id,
-                        assignee_id: lead.owner_id ?? me.id,
+                        assignee_ids: [lead.owner_id ?? me.id],
                         due_date: taskDue || null,
                       },
                       {

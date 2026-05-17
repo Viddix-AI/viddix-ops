@@ -257,7 +257,7 @@ function TasksTab({
                   {
                     title: title.trim(),
                     client_id: clientId,
-                    assignee_id: ownerId,
+                    assignee_ids: ownerId ? [ownerId] : [],
                     due_date: due || null,
                   },
                   {

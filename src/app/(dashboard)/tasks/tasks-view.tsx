@@ -10,16 +10,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { AvatarStack } from "@/components/dashboard/avatar-stack"
 import { EmptyState } from "@/components/dashboard/empty-state"
+import { PageHeader } from "@/components/dashboard/page-header"
 import { PriorityBadge } from "@/components/dashboard/priority-badge"
 import { TaskStatusBadge } from "@/components/dashboard/status-badge"
-import { UserAvatar } from "@/components/dashboard/user-avatar"
+import { TeamBadge } from "@/components/dashboard/team-badge"
 import { useTasks, useUpdateTask } from "@/hooks/use-tasks"
 import { useProfiles } from "@/hooks/use-profile"
 import { relativeDay } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import { TEAMS, type Task, type TaskPriority, type Team } from "@/lib/types"
-import { TeamBadge } from "@/components/dashboard/team-badge"
+import {
+  TEAMS,
+  type Profile,
+  type Task,
+  type TaskPriority,
+  type Team,
+} from "@/lib/types"
+import { TaskDetailSheet } from "./task-detail-sheet"
 
 const PRIORITIES: { value: TaskPriority; label: string }[] = [
   { value: "low", label: "Low" },
@@ -45,6 +53,7 @@ export function TasksView() {
   const [filterAssignee, setFilterAssignee] = React.useState("")
   const [filterPriority, setFilterPriority] = React.useState<TaskPriority | "">("")
   const [filterTeam, setFilterTeam] = React.useState<Team | "">("")
+  const [activeTaskId, setActiveTaskId] = React.useState<string | null>(null)
 
   const { todayMs, weekEndMs } = React.useMemo(() => {
     const d = new Date()
@@ -64,12 +73,17 @@ export function TasksView() {
     return "later"
   }
 
+  // Filtering: assignee filter matches if the task contains the picked id.
+  // Team filter matches if ANY assignee belongs to the picked team — so a
+  // cross-team task still surfaces under either team filter.
   const filtered = tasks.filter((t) => {
-    if (filterAssignee && t.assignee_id !== filterAssignee) return false
+    if (filterAssignee && !t.assignee_ids.includes(filterAssignee)) return false
     if (filterPriority && t.priority !== filterPriority) return false
     if (filterTeam) {
-      const owner = profiles.find((p) => p.id === t.assignee_id)
-      if (owner?.team !== filterTeam) return false
+      const teams = t.assignee_ids
+        .map((id) => profiles.find((p) => p.id === id)?.team)
+        .filter(Boolean) as Team[]
+      if (!teams.includes(filterTeam)) return false
     }
     return true
   })
@@ -86,117 +100,142 @@ export function TasksView() {
     })
   }
 
+  const openCount = tasks.filter((t) => t.status !== "done").length
+  const activeTask = tasks.find((t) => t.id === activeTaskId) ?? null
+
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-2">
-        <Select
-          value={filterAssignee}
-          onValueChange={(v) => setFilterAssignee(v ?? "")}
-        >
-          <SelectTrigger size="sm">
-            <SelectValue placeholder="All assignees" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">All assignees</SelectItem>
-            {profiles.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                <span className="inline-flex items-center gap-1.5">
-                  {p.full_name}
-                  <TeamBadge team={p.team} />
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={filterTeam}
-          onValueChange={(v) => setFilterTeam((v ?? "") as Team | "")}
-        >
-          <SelectTrigger size="sm">
-            <SelectValue placeholder="All teams" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">All teams</SelectItem>
-            {TEAMS.map((t) => (
-              <SelectItem key={t.id} value={t.id}>
-                {t.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={filterPriority}
-          onValueChange={(v) => setFilterPriority((v ?? "") as TaskPriority | "")}
-        >
-          <SelectTrigger size="sm">
-            <SelectValue placeholder="All priorities" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">All priorities</SelectItem>
-            {PRIORITIES.map((p) => (
-              <SelectItem key={p.value} value={p.value}>
-                {p.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+    <>
+      <PageHeader
+        eyebrow="HOLDING · TASKS"
+        title="Tasks"
+        description={`${openCount} open · ${tasks.length} total`}
+      />
+
+      <div className="space-y-6 px-4 py-5 lg:px-6">
+        <div className="flex items-center gap-2">
+          <Select
+            value={filterAssignee}
+            onValueChange={(v) => setFilterAssignee(v ?? "")}
+          >
+            <SelectTrigger size="sm">
+              <SelectValue placeholder="All assignees" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">All assignees</SelectItem>
+              {profiles.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  <span className="inline-flex items-center gap-1.5">
+                    {p.full_name}
+                    <TeamBadge team={p.team} />
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={filterTeam}
+            onValueChange={(v) => setFilterTeam((v ?? "") as Team | "")}
+          >
+            <SelectTrigger size="sm">
+              <SelectValue placeholder="All teams" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">All teams</SelectItem>
+              {TEAMS.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            value={filterPriority}
+            onValueChange={(v) => setFilterPriority((v ?? "") as TaskPriority | "")}
+          >
+            <SelectTrigger size="sm">
+              <SelectValue placeholder="All priorities" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">All priorities</SelectItem>
+              {PRIORITIES.map((p) => (
+                <SelectItem key={p.value} value={p.value}>
+                  {p.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {(["overdue", "today", "week", "later"] as Group[]).map((group) => {
+          const items = groups[group]
+          if (!items.length) return null
+          return (
+            <section key={group}>
+              <h3
+                className={cn(
+                  "mb-2 font-mono text-[11px] uppercase tracking-[0.18em]",
+                  group === "overdue" ? "text-destructive" : "text-text-tertiary"
+                )}
+              >
+                {GROUP_LABELS[group]} · {items.length}
+              </h3>
+              <ul className="divide-y divide-border-subtle rounded-[var(--radius-lg)] border border-border-subtle bg-card">
+                {items.map((task) => {
+                  const assignees = task.assignee_ids
+                    .map((id) => profiles.find((p) => p.id === id))
+                    .filter((p): p is Profile => Boolean(p))
+                  return (
+                    <li
+                      key={task.id}
+                      onClick={() => setActiveTaskId(task.id)}
+                      className="flex cursor-pointer items-center gap-3 px-3 py-2.5 transition-colors hover:bg-surface-3/60"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={task.status === "done"}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={() => toggleDone(task)}
+                        className="size-4 shrink-0 cursor-pointer accent-primary"
+                      />
+                      <span
+                        className={cn(
+                          "flex-1 text-sm font-medium text-text-primary",
+                          task.status === "done" &&
+                            "text-text-tertiary line-through"
+                        )}
+                      >
+                        {task.title}
+                      </span>
+                      <div className="hidden items-center gap-2 sm:flex">
+                        <PriorityBadge priority={task.priority} />
+                        <TaskStatusBadge status={task.status} />
+                      </div>
+                      <AvatarStack profiles={assignees} max={3} size="sm" />
+                      <span className="w-16 shrink-0 text-right font-mono text-[11px] tabular-nums text-text-tertiary">
+                        {relativeDay(task.due_date)}
+                      </span>
+                    </li>
+                  )
+                })}
+              </ul>
+            </section>
+          )
+        })}
+
+        {filtered.length === 0 && (
+          <EmptyState
+            icon={<CheckSquare className="size-4" />}
+            title="No tasks match your filters"
+            description="Loosen a filter or create your first task to get started."
+          />
+        )}
       </div>
 
-      {(["overdue", "today", "week", "later"] as Group[]).map((group) => {
-        const items = groups[group]
-        if (!items.length) return null
-        return (
-          <section key={group}>
-            <h3
-              className={cn(
-                "mb-2 text-xs font-semibold uppercase tracking-wider",
-                group === "overdue" ? "text-destructive" : "text-muted-foreground"
-              )}
-            >
-              {GROUP_LABELS[group]} · {items.length}
-            </h3>
-            <ul className="divide-y divide-border rounded-lg border border-border">
-              {items.map((task) => {
-                const assignee = profiles.find((p) => p.id === task.assignee_id)
-                return (
-                  <li key={task.id} className="flex items-center gap-3 px-3 py-2.5">
-                    <input
-                      type="checkbox"
-                      checked={task.status === "done"}
-                      onChange={() => toggleDone(task)}
-                      className="size-4 shrink-0 cursor-pointer accent-primary"
-                    />
-                    <span
-                      className={cn(
-                        "flex-1 text-sm font-medium",
-                        task.status === "done" && "line-through text-muted-foreground"
-                      )}
-                    >
-                      {task.title}
-                    </span>
-                    <div className="hidden items-center gap-2 sm:flex">
-                      <PriorityBadge priority={task.priority} />
-                      <TaskStatusBadge status={task.status} />
-                    </div>
-                    <UserAvatar profile={assignee ?? null} size="sm" />
-                    <span className="w-16 shrink-0 text-right text-[11px] text-muted-foreground">
-                      {relativeDay(task.due_date)}
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
-          </section>
-        )
-      })}
-
-      {filtered.length === 0 && (
-        <EmptyState
-          icon={<CheckSquare className="size-4" />}
-          title="No tasks match your filters"
-          description="Loosen a filter or create your first task to get started."
-        />
-      )}
-    </div>
+      <TaskDetailSheet
+        task={activeTask}
+        open={!!activeTaskId}
+        onOpenChange={(o) => !o && setActiveTaskId(null)}
+      />
+    </>
   )
 }

@@ -166,8 +166,8 @@ export function LeadsBoard() {
   return (
     <>
       <PageHeader
-        eyebrow="PIPELINE"
-        title="Leads"
+        eyebrow="HOLDING · PIPELINE"
+        title="Pipeline"
         description="Drag cards to move leads through the pipeline."
         actions={
           <div className="flex items-center gap-2">

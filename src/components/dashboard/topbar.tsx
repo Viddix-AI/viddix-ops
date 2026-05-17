@@ -31,7 +31,7 @@ import { createClient } from "@/lib/supabase/client"
 // node, the eyebrow is "Holding" by convention.
 const BREADCRUMB: Record<string, string> = {
   "/dashboard": "Dashboard",
-  "/leads": "Leads",
+  "/leads": "Pipeline",
   "/clients": "Clients",
   "/partners": "Partners",
   "/tasks": "Tasks",

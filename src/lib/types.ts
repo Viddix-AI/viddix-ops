@@ -131,7 +131,10 @@ export type Task = {
   due_date: string | null
   priority: TaskPriority
   status: TaskStatus
-  assignee_id: string | null
+  // Multi-assignee: a task can be shared by several people on the team.
+  // The data-store healer maps legacy single-assignee rows to a one-element
+  // array on read, so existing payloads keep working without a migration.
+  assignee_ids: string[]
   client_id: string | null
   lead_id: string | null
   created_at: string

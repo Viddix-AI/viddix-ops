@@ -17,9 +17,9 @@ import { googleCalendarUrl } from "@/lib/ics"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { KPIStat } from "@/components/ui/kpi-stat"
 import { Sparkline } from "@/components/ui/sparkline"
+import { AvatarStack } from "@/components/dashboard/avatar-stack"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { PageHeader } from "@/components/dashboard/page-header"
-import { UserAvatar } from "@/components/dashboard/user-avatar"
 import { useClients } from "@/hooks/use-clients"
 import { useEvents } from "@/hooks/use-events"
 import { useLeads } from "@/hooks/use-leads"
@@ -208,7 +208,7 @@ export default function DashboardHome() {
           <SectionLabel>Operations</SectionLabel>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <KPIStat
-              label="Open leads"
+              label="Open pipeline"
               value={String(openLeads.length)}
               sub={`${money(pipelineValue)} pipeline`}
               icon={<ArrowUpRight className="size-4" />}
@@ -367,13 +367,15 @@ export default function DashboardHome() {
               <CardContent>
                 <ul className="space-y-2.5">
                   {todayTasks.slice(0, 6).map((t) => {
-                    const owner = profiles.find((p) => p.id === t.assignee_id)
+                    const owners = t.assignee_ids
+                      .map((id) => profiles.find((p) => p.id === id))
+                      .filter((p): p is NonNullable<typeof p> => Boolean(p))
                     return (
                       <li
                         key={t.id}
                         className="-mx-2 flex items-start gap-2.5 rounded-md p-2 transition-colors hover:bg-surface-3"
                       >
-                        <UserAvatar profile={owner} size="sm" />
+                        <AvatarStack profiles={owners} max={3} size="sm" />
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium text-text-primary">
                             {t.title}

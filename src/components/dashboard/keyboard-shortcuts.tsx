@@ -35,7 +35,7 @@ type ShortcutEntry = {
 
 const NAV_SHORTCUTS: { key: string; path: string; label: string }[] = [
   { key: "d", path: "/dashboard", label: "Dashboard" },
-  { key: "l", path: "/leads",     label: "Leads" },
+  { key: "l", path: "/leads",     label: "Pipeline" },
   { key: "c", path: "/clients",   label: "Clients" },
   { key: "p", path: "/partners",  label: "Partners" },
   { key: "t", path: "/tasks",     label: "Tasks" },

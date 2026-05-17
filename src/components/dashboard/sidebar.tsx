@@ -20,7 +20,7 @@ import {
 
 export const NAV_ITEMS = [
   { href: "/dashboard",  label: "Dashboard", icon: Home },
-  { href: "/leads",      label: "Leads",     icon: Sparkles },
+  { href: "/leads",      label: "Pipeline",  icon: Sparkles },
   { href: "/clients",    label: "Clients",   icon: Briefcase },
   { href: "/partners",   label: "Partners",  icon: Handshake },
   { href: "/tasks",      label: "Tasks",     icon: CheckSquare },

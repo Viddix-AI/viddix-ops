@@ -132,7 +132,7 @@ export function CommandPalette({
             </Group>
 
             {leads.length > 0 && (
-              <Group heading="Leads">
+              <Group heading="Pipeline">
                 {leads.slice(0, 8).map((l) => (
                   <PaletteItem
                     key={l.id}
