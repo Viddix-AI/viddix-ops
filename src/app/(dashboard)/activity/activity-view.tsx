@@ -105,6 +105,7 @@ export function ActivityView() {
   return (
     <>
       <PageHeader
+        eyebrow="HOLDING · LOG"
         title="Activity"
         description={`${activities.length} events tracked across the workspace`}
       />

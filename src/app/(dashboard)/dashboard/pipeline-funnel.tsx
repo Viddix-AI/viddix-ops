@@ -66,23 +66,23 @@ export function PipelineFunnel({ leads }: { leads: Lead[] }) {
                       </Pill>
                       <div
                         className={cn(
-                          "relative h-16 overflow-hidden rounded-md border border-border bg-card",
+                          "relative h-20 overflow-hidden rounded-md border border-border-subtle bg-surface-2",
                           row.count === 0 && "opacity-60"
                         )}
                       >
                         <div
                           aria-hidden
-                          className="absolute inset-x-0 bottom-0 bg-primary/15 transition-all"
+                          className="absolute inset-x-0 bottom-0 bg-primary/12 transition-all"
                           style={{
                             height: `${Math.max(6, pct)}%`,
                           }}
                         />
-                        <div className="relative flex h-full flex-col justify-end p-2">
-                          <p className="font-heading text-base font-semibold tabular-nums leading-none">
+                        <div className="relative flex h-full flex-col justify-end p-2.5">
+                          <p className="font-display text-[22px] leading-none tracking-[-0.02em] tabular-nums text-text-primary">
                             {row.count}
                           </p>
                           {row.value > 0 && (
-                            <p className="mt-1 text-[10px] font-medium tabular-nums text-muted-foreground">
+                            <p className="mt-1 font-mono text-[10px] tabular-nums text-text-tertiary">
                               {money(row.value)}
                             </p>
                           )}
@@ -93,7 +93,7 @@ export function PipelineFunnel({ leads }: { leads: Lead[] }) {
                 )
               })}
             </div>
-            <div className="mt-4 flex items-center justify-between border-t border-border pt-3 text-xs text-muted-foreground">
+            <div className="mt-4 flex items-center justify-between border-t border-border-subtle pt-3 text-xs text-text-secondary">
               <span>
                 {leads.length} total leads
                 {lostCount > 0 && (

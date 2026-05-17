@@ -203,6 +203,7 @@ export function ClientsTable() {
   return (
     <>
       <PageHeader
+        eyebrow="HOLDING · ACCOUNTS"
         title="Clients"
         description={`${clients.length} clients · ${money(totalMRR)} MRR`}
         actions={
@@ -244,7 +245,7 @@ export function ClientsTable() {
       <div className="space-y-4 px-4 py-5 lg:px-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative flex-1">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-text-tertiary" />
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -306,15 +307,12 @@ export function ClientsTable() {
             }
           />
         ) : (
-          <div className="overflow-x-auto rounded-xl bg-card ring-1 ring-border shadow-sm">
+          <div className="overflow-x-auto rounded-[var(--radius-lg)] bg-card ring-1 ring-border-subtle shadow-[var(--shadow-paper-sm)]">
             <table className="w-full text-sm">
               <thead
                 className={cn(
-                  "sticky top-14 z-10 bg-muted/80 text-xs font-medium text-muted-foreground backdrop-blur",
-                  // Round top corners to match the wrapper so the sticky
-                  // header sits flush. last:rounded-tr-xl on a select isn't
-                  // possible inside a single tr, so we apply on the tr itself.
-                  "[&_tr]:rounded-t-xl"
+                  "sticky top-14 z-10 border-b border-border-subtle bg-surface-3 font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-text-tertiary backdrop-blur",
+                  "[&_tr]:rounded-t-[var(--radius-lg)]"
                 )}
               >
                 <tr>
@@ -427,8 +425,8 @@ function ClientRow({
   return (
     <tr
       className={cn(
-        "group transition-colors hover:bg-muted/40",
-        selected && "bg-accent/40"
+        "group border-b border-border-subtle transition-colors hover:bg-surface-3/60",
+        selected && "bg-accent/50"
       )}
     >
       <Td className={cn("w-10 pl-4 pr-0", rowPad)}>
@@ -443,11 +441,11 @@ function ClientRow({
       </Td>
       <Td className={rowPad}>
         <Link href={`/clients/${client.id}`} className="block">
-          <p className={cn("font-medium", compact && "text-[13px]")}>
+          <p className={cn("font-medium text-text-primary", compact && "text-[13px]")}>
             {client.name}
           </p>
           {!compact && (
-            <p className="text-xs font-medium text-muted-foreground">
+            <p className="text-xs font-medium text-text-tertiary">
               {client.industry ?? "—"}
             </p>
           )}
@@ -455,11 +453,11 @@ function ClientRow({
       </Td>
       <Td className={rowPad}>
         <Link href={`/clients/${client.id}`} className="block">
-          <p className={cn(compact && "text-[13px]")}>
+          <p className={cn("text-text-primary", compact && "text-[13px]")}>
             {client.contact_name ?? "—"}
           </p>
           {!compact && client.contact_email && (
-            <p className="text-xs font-medium text-muted-foreground">
+            <p className="text-xs font-medium text-text-tertiary">
               {client.contact_email}
             </p>
           )}
@@ -475,10 +473,10 @@ function ClientRow({
       </Td>
       <Td className={rowPad} align="right">
         <Link href={`/clients/${client.id}`} className="block">
-          <span className="font-semibold tabular-nums">
+          <span className="font-mono tabular-nums text-text-primary">
             {money(Number(client.mrr || 0))}
           </span>
-          <span className="ml-0.5 text-[10px] font-medium text-muted-foreground">
+          <span className="ml-0.5 text-[10px] font-medium text-text-tertiary">
             /mo
           </span>
         </Link>
@@ -486,7 +484,7 @@ function ClientRow({
       <Td className={rowPad}>
         <Link
           href={`/clients/${client.id}`}
-          className="block text-xs font-medium text-muted-foreground"
+          className="block font-mono text-[12px] tabular-nums text-text-tertiary"
         >
           {client.started_at ?? "—"}
         </Link>
@@ -526,8 +524,8 @@ function OwnerCell({
       <SelectTrigger
         size="sm"
         className={cn(
-          "h-auto w-auto gap-1.5 border-transparent bg-transparent px-1.5 py-0.5 text-left transition-colors hover:bg-muted hover:text-foreground",
-          !owner && "text-text-secondary"
+          "h-auto w-auto gap-1.5 border-transparent bg-transparent px-1.5 py-0.5 text-left transition-colors hover:bg-surface-3 hover:text-text-primary",
+          !owner && "text-text-tertiary"
         )}
         onClick={(e) => e.stopPropagation()}
       >
@@ -548,7 +546,7 @@ function OwnerCell({
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="__none__">
-          <span className="text-muted-foreground">Unassign</span>
+          <span className="text-text-tertiary">Unassign</span>
         </SelectItem>
         {profiles.map((p) => (
           <SelectItem key={p.id} value={p.id}>
@@ -603,11 +601,11 @@ function RowActions({
 
 function ClientsTableSkeleton() {
   return (
-    <div className="overflow-hidden rounded-xl bg-card ring-1 ring-border shadow-sm">
-      <div className="border-b border-border bg-muted/80 px-4 py-2.5">
+    <div className="overflow-hidden rounded-[var(--radius-lg)] bg-card ring-1 ring-border-subtle shadow-[var(--shadow-paper-sm)]">
+      <div className="border-b border-border-subtle bg-surface-3 px-4 py-2.5">
         <Skeleton className="h-3 w-24" />
       </div>
-      <div className="divide-y divide-border">
+      <div className="divide-y divide-border-subtle">
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i} className="flex items-center gap-3 px-4 py-3">
             <Skeleton className="size-4 rounded-sm" />
@@ -651,9 +649,9 @@ function BulkActionBar({
     <div
       role="region"
       aria-label="Bulk actions"
-      className="sticky top-14 z-20 flex flex-wrap items-center gap-2 rounded-md border border-border bg-card px-3 py-2 shadow-sm"
+      className="sticky top-14 z-20 flex flex-wrap items-center gap-2 rounded-md border border-border-subtle bg-card px-3 py-2 shadow-[var(--shadow-paper-sm)]"
     >
-      <span className="text-sm font-medium">
+      <span className="text-sm font-medium text-text-primary">
         {count} selected
       </span>
       <span className="text-text-tertiary" aria-hidden>

@@ -68,6 +68,7 @@ export function PartnersView() {
   return (
     <>
       <PageHeader
+        eyebrow="HOLDING · PARTNERS"
         title="Partners"
         description={`${partners.length} partners · ${money(totalMRRSplit)}/mo allocated across active retainers`}
         actions={

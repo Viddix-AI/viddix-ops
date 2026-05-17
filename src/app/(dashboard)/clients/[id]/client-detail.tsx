@@ -72,11 +72,12 @@ export function ClientDetail({ id }: { id: string }) {
   return (
     <>
       <PageHeader
+        eyebrow={client.industry ? `ACCOUNT · ${client.industry.toUpperCase()}` : "ACCOUNT"}
         title={client.name}
         description={
           <Link
             href="/clients"
-            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            className="inline-flex items-center gap-1 text-xs text-text-tertiary hover:text-text-primary"
           >
             <ArrowLeft className="size-3.5" /> Back to clients
           </Link>

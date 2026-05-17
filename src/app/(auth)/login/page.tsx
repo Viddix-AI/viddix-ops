@@ -69,22 +69,29 @@ function LoginInner() {
   }
 
   return (
-    <main className="grid min-h-svh grid-cols-1 lg:grid-cols-2">
-      <div className="flex items-center justify-center bg-background px-6 py-12">
+    <main className="grid min-h-svh grid-cols-1 bg-surface-1 lg:grid-cols-[3fr_2fr]">
+      <div className="flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-sm">
-          <Link href="/" className="mb-10 flex items-center gap-2">
-            <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground">
-              <span className="font-heading text-base font-semibold">V</span>
+          <Link href="/" className="mb-12 inline-flex items-baseline gap-2.5">
+            <span
+              className="font-display text-[40px] leading-none text-text-primary"
+              style={{ fontFeatureSettings: '"ss01"', letterSpacing: "-0.04em" }}
+              aria-hidden
+            >
+              V
             </span>
-            <span className="font-heading text-lg font-semibold tracking-tight">
+            <span className="font-sans text-[15px] font-medium tracking-[-0.01em] text-text-primary">
               Viddix Ops
             </span>
           </Link>
 
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">
+          <p className="mb-2 font-mono text-[11px] uppercase tracking-[0.18em] text-text-tertiary">
+            {mode === "signin" ? "ACCESS" : "ENROLMENT"}
+          </p>
+          <h1 className="font-display text-[32px] leading-[1.05] tracking-[-0.02em] text-text-primary">
             {mode === "signin" ? "Welcome back" : "Create your workspace"}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-2 text-[15px] leading-relaxed text-text-secondary">
             {mode === "signin"
               ? "Sign in to your Viddix workspace."
               : "Set up an account for the Viddix CRM."}
@@ -93,47 +100,43 @@ function LoginInner() {
           <form onSubmit={onSubmit} className="mt-8 space-y-4">
             {mode === "signup" && (
               <label className="block space-y-1.5">
-                <span className="text-xs font-medium text-foreground/80">Full name</span>
+                <span className="text-xs font-medium text-text-secondary">Full name</span>
                 <Input
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Pablo Martin"
-                  className="h-10"
+                  className="h-11"
                   required
                 />
               </label>
             )}
             <label className="block space-y-1.5">
-              <span className="text-xs font-medium text-foreground/80">Email</span>
+              <span className="text-xs font-medium text-text-secondary">Email</span>
               <Input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="pablo@viddix.ai"
-                className="h-10"
+                className="h-11"
                 required
               />
             </label>
 
             <label className="block space-y-1.5">
-              <span className="text-xs font-medium text-foreground/80">Password</span>
+              <span className="text-xs font-medium text-text-secondary">Password</span>
               <Input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="h-10"
+                className="h-11"
                 required
                 minLength={mode === "signup" ? 8 : undefined}
               />
             </label>
 
-            <Button
-              type="submit"
-              className="h-10 w-full"
-              disabled={busy}
-            >
+            <Button type="submit" size="lg" className="w-full" disabled={busy}>
               {busy
                 ? mode === "signin" ? "Signing in…" : "Creating account…"
                 : mode === "signin" ? "Sign in" : "Create account"}
@@ -143,14 +146,14 @@ function LoginInner() {
           <button
             type="button"
             onClick={() => setMode((m) => (m === "signin" ? "signup" : "signin"))}
-            className="mt-4 text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            className="mt-4 text-xs text-text-tertiary underline-offset-4 hover:text-text-primary hover:underline"
           >
             {mode === "signin"
               ? "Need an account? Create one →"
               : "Already have an account? Sign in →"}
           </button>
 
-          <p className="mt-6 text-xs text-muted-foreground">
+          <p className="mt-8 text-xs text-text-tertiary">
             {supabaseConfigured
               ? "Internal workspace. Email confirmation may be required after signup."
               : "Demo mode — no auth backend configured. Any submit signs you in."}
@@ -159,22 +162,33 @@ function LoginInner() {
       </div>
 
       <div
-        className="relative hidden bg-sidebar lg:block"
+        className="relative hidden overflow-hidden border-l border-border-subtle lg:block"
         style={{
           backgroundImage:
-            "radial-gradient(1200px 600px at 80% 10%, color-mix(in oklab, var(--primary) 25%, transparent), transparent 60%), linear-gradient(135deg, var(--sidebar) 0%, var(--sidebar-accent) 100%)",
+            "linear-gradient(180deg, var(--surface-3) 0%, var(--surface-1) 100%)",
         }}
       >
-        <div className="absolute inset-0 flex flex-col justify-end p-12 text-slate-200">
-          <div className="max-w-md">
-            <p className="font-heading text-3xl font-semibold leading-tight tracking-tight text-white">
-              Run the agency, don&apos;t let it run you.
-            </p>
-            <p className="mt-3 text-sm text-slate-300">
-              Pipeline, clients, tasks and the calendar — all in one place,
-              built for the three of us.
-            </p>
-          </div>
+        {/* SVG grain over the gradient — pure data-uri turbulence, no asset
+            request. Opacity stays low so it reads as paper, not noise. */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-[0.07]"
+          style={{
+            backgroundImage:
+              "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='1'/></svg>\")",
+            backgroundSize: "180px 180px",
+          }}
+        />
+        <div className="absolute inset-0 flex flex-col justify-end p-14">
+          <p
+            className="max-w-md font-display text-[26px] leading-[1.25] italic tracking-[-0.01em] text-text-secondary"
+            style={{ fontFeatureSettings: '"ss01"' }}
+          >
+            “Operations that think in silence.”
+          </p>
+          <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.18em] text-text-tertiary">
+            VIDDIX HOLDING
+          </p>
         </div>
       </div>
     </main>

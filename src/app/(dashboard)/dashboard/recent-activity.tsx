@@ -139,7 +139,7 @@ export function RecentActivity({ limit = DEFAULT_LIMIT }: { limit?: number }) {
               const sample = items[0]
               return (
                 <section key={day}>
-                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <p className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-text-tertiary">
                     {dayLabel(sample.created_at)}
                   </p>
                   <ul className="space-y-1.5">
@@ -148,17 +148,17 @@ export function RecentActivity({ limit = DEFAULT_LIMIT }: { limit?: number }) {
                       const actor = profiles.find((p) => p.id === a.actor_id)
                       const href = hrefFor(a)
                       const row = (
-                        <div className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/60">
+                        <div className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-surface-3">
                           <Pill tone={tone} size="sm" className="size-6 px-0">
                             <Icon className="size-3" />
                           </Pill>
-                          <p className="min-w-0 flex-1 truncate text-sm font-medium">
+                          <p className="min-w-0 flex-1 truncate text-sm font-medium text-text-primary">
                             {a.message}
                           </p>
                           {actor && (
                             <UserAvatar profile={actor} size="sm" />
                           )}
-                          <span className="w-12 shrink-0 text-right text-[11px] tabular-nums text-text-secondary">
+                          <span className="w-12 shrink-0 text-right font-mono text-[11px] tabular-nums text-text-tertiary">
                             {timeOnly(a.created_at)}
                           </span>
                         </div>

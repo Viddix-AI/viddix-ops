@@ -1,14 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { useQueryClient } from "@tanstack/react-query"
 import { useTheme } from "next-themes"
 import { Bell, Check, Monitor, Moon, Search, Sun } from "lucide-react"
 import { toast } from "sonner"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { TeamBadge } from "./team-badge"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -20,31 +19,48 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { CommandPalette } from "./command-palette"
+import { MobileNav } from "./mobile-nav"
+import { TeamBadge } from "./team-badge"
 import { useCurrentProfile } from "@/hooks/use-profile"
 import { ensureNotificationPermission } from "@/hooks/use-task-reminders"
 import { store } from "@/lib/data-store"
 import { initials } from "@/lib/format"
 import { createClient } from "@/lib/supabase/client"
-import { MobileNav } from "./mobile-nav"
+
+// Breadcrumb labels keyed by path prefix. Kept tiny — we only need the leaf
+// node, the eyebrow is "Holding" by convention.
+const BREADCRUMB: Record<string, string> = {
+  "/dashboard": "Dashboard",
+  "/leads": "Leads",
+  "/clients": "Clients",
+  "/partners": "Partners",
+  "/tasks": "Tasks",
+  "/calendar": "Calendar",
+  "/activity": "Activity",
+}
+
+function leafFromPath(pathname: string): string {
+  // Match the longest known prefix so /clients/<id> still resolves to "Clients".
+  const match = Object.keys(BREADCRUMB)
+    .filter((p) => pathname === p || pathname.startsWith(`${p}/`))
+    .sort((a, b) => b.length - a.length)[0]
+  return match ? BREADCRUMB[match] : "Workspace"
+}
 
 export function Topbar() {
   const router = useRouter()
+  const pathname = usePathname()
   const me = useCurrentProfile()
   const qc = useQueryClient()
   const { theme, setTheme } = useTheme()
   const [paletteOpen, setPaletteOpen] = React.useState(false)
-  // Detect Mac so the kbd hint shows ⌘ instead of Ctrl. Uses the
-  // "store-info-from-previous-renders" pattern (see also Sidebar's
-  // StorageStatus + client-detail's SplitInput) so we never call setState
-  // inside an effect — render reads the value once, then converges.
+  // Detect Mac so the kbd hint shows ⌘ instead of Ctrl. "Store-info-from-
+  // previous-renders" pattern: render reads it once, converges.
   const [isMac, setIsMac] = React.useState<boolean | null>(null)
   if (isMac === null && typeof navigator !== "undefined") {
     setIsMac(/Mac|iPhone|iPad/.test(navigator.userAgent))
   }
 
-  // Global ⌘K / Ctrl+K shortcut. Capture-phase listener so it wins over any
-  // focused input that might also bind cmd+k. Also handles `/` as a quick
-  // open when not already typing into a form field.
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey)) {
@@ -91,34 +107,47 @@ export function Topbar() {
     toast.success("Demo data reset")
   }
 
+  const leaf = leafFromPath(pathname ?? "")
+
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur lg:px-6">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border-subtle bg-background/85 px-4 backdrop-blur lg:px-8">
       <MobileNav />
 
-      <button
-        type="button"
-        onClick={() => setPaletteOpen(true)}
-        aria-label="Open search (Command-K)"
-        className="hidden h-9 max-w-md flex-1 items-center gap-2 rounded-md bg-muted/60 px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 md:flex"
-      >
-        <Search className="size-4 shrink-0" />
-        <span className="flex-1 text-left">Search clients, leads, tasks…</span>
-        <kbd className="inline-flex h-5 items-center gap-0.5 rounded-sm border border-border bg-background px-1 font-mono text-[10px] text-text-secondary shadow-sm">
-          <span>{isMac === true ? "⌘" : "Ctrl"}</span>
-          <span>K</span>
-        </kbd>
-      </button>
+      {/* Editorial breadcrumb — eyebrow in sans, leaf in serif italic. */}
+      <nav aria-label="Breadcrumb" className="hidden items-baseline gap-2 md:flex">
+        <span className="text-[13px] text-text-tertiary">Holding</span>
+        <span className="text-text-tertiary" aria-hidden>·</span>
+        <span className="font-display text-[16px] italic tracking-[-0.01em] text-text-primary">
+          {leaf}
+        </span>
+      </nav>
 
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => setPaletteOpen(true)}
+          aria-label="Open search (Command-K)"
+          className="hidden h-8 items-center gap-2 rounded-[var(--radius-md)] border border-border-subtle bg-surface-3/60 px-2.5 text-[13px] text-text-tertiary transition-colors hover:bg-surface-3 hover:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 md:inline-flex"
+        >
+          <Search className="size-3.5 shrink-0" />
+          <span className="text-left">Search</span>
+          <kbd className="ml-1 inline-flex h-5 items-center gap-0.5 rounded-sm border border-border-subtle bg-card px-1.5 font-mono text-[11px] text-text-tertiary">
+            <span>{isMac === true ? "⌘" : "Ctrl"}</span>
+            <span>K</span>
+          </kbd>
+        </button>
+
         <Button variant="ghost" size="icon-sm" aria-label="Notifications">
           <Bell />
         </Button>
+
+        <span aria-hidden className="hidden h-5 w-px bg-border-subtle md:block" />
 
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
               <button
-                className="flex items-center gap-2 rounded-full p-0.5 pr-2 transition-colors hover:bg-muted"
+                className="flex items-center gap-2 rounded-full p-0.5 pr-2 transition-colors hover:bg-surface-3"
                 aria-label="Account menu"
               />
             }
@@ -126,7 +155,7 @@ export function Topbar() {
             <Avatar size="sm">
               <AvatarFallback>{initials(me.full_name)}</AvatarFallback>
             </Avatar>
-            <span className="hidden items-center gap-1.5 text-xs font-medium text-foreground sm:inline-flex">
+            <span className="hidden items-center gap-1.5 text-xs font-medium text-text-primary sm:inline-flex">
               {me.full_name}
               <TeamBadge team={me.team} />
             </span>
@@ -137,10 +166,10 @@ export function Topbar() {
                 {me.full_name}
                 <TeamBadge team={me.team} />
               </div>
-              <div className="text-xs text-muted-foreground">{me.email}</div>
+              <div className="text-xs text-text-secondary">{me.email}</div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <DropdownMenuLabel className="font-mono text-[10px] uppercase tracking-[0.12em] text-text-tertiary">
               Theme
             </DropdownMenuLabel>
             <DropdownMenuItem onClick={() => setTheme("light")}>

@@ -63,18 +63,18 @@ export function CommandPalette({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="gap-0 overflow-hidden p-0 sm:max-w-xl"
+        className="gap-0 overflow-hidden rounded-[var(--radius-xl)] border border-border-subtle bg-card p-0 shadow-[var(--shadow-paper-lg)] backdrop-blur sm:max-w-[640px]"
       >
         <Command label="Global search" className="flex flex-col">
-          <div className="flex items-center gap-2 border-b border-border px-3">
-            <Search className="size-4 shrink-0 text-muted-foreground" />
+          <div className="flex items-center gap-2 border-b border-border-subtle px-4">
+            <Search className="size-4 shrink-0 text-text-tertiary" />
             <Command.Input
               placeholder="Type a command or search…"
-              className="flex h-11 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-12 w-full bg-transparent text-[16px] tracking-[-0.01em] outline-none placeholder:text-text-tertiary disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
           <Command.List className="max-h-[24rem] overflow-y-auto p-1.5">
-            <Command.Empty className="py-8 text-center text-sm text-muted-foreground">
+            <Command.Empty className="py-8 text-center text-sm text-text-tertiary">
               No results found.
             </Command.Empty>
 
@@ -191,7 +191,7 @@ export function CommandPalette({
             )}
           </Command.List>
 
-          <div className="flex items-center justify-between border-t border-border bg-muted/40 px-3 py-2 text-[11px] text-text-secondary">
+          <div className="flex items-center justify-between border-t border-border-subtle bg-surface-3/40 px-4 py-2 text-[11px] text-text-tertiary">
             <span className="flex items-center gap-1">
               <Kbd>↑</Kbd>
               <Kbd>↓</Kbd>
@@ -224,7 +224,7 @@ function Group({
       heading={heading}
       className={cn(
         "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1",
-        "[&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase"
+        "[&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:tracking-[0.16em] [&_[cmdk-group-heading]]:text-text-tertiary [&_[cmdk-group-heading]]:uppercase"
       )}
     >
       {children}
@@ -252,22 +252,22 @@ function PaletteItem({
       value={value}
       onSelect={onSelect}
       className={cn(
-        "flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors",
-        "data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground",
+        "flex cursor-pointer items-center gap-2.5 rounded-md border-l-2 border-transparent px-3 py-1.5 text-sm transition-colors",
+        "data-[selected=true]:border-primary data-[selected=true]:bg-surface-3 data-[selected=true]:pl-[14px]",
         "aria-disabled:pointer-events-none aria-disabled:opacity-50"
       )}
     >
-      <span className="grid size-6 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
+      <span className="grid size-6 shrink-0 place-items-center rounded-sm bg-surface-3 text-text-secondary">
         {icon}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium">{label}</p>
+        <p className="truncate font-medium text-text-primary">{label}</p>
         {sub && (
-          <p className="truncate text-[11px] text-muted-foreground">{sub}</p>
+          <p className="truncate text-[11px] text-text-tertiary">{sub}</p>
         )}
       </div>
       {hint && (
-        <span className="shrink-0 text-[11px] text-muted-foreground">
+        <span className="shrink-0 text-[11px] text-text-tertiary">
           {hint} <ArrowRight className="inline size-3" />
         </span>
       )}
@@ -277,7 +277,7 @@ function PaletteItem({
 
 function Kbd({ children }: { children: React.ReactNode }) {
   return (
-    <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded-sm border border-border bg-background px-1 font-mono text-[10px] text-text-secondary shadow-sm">
+    <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded-sm border border-border-subtle bg-card px-1 font-mono text-[10px] text-text-tertiary">
       {children}
     </kbd>
   )

@@ -251,6 +251,7 @@ export function CalendarView() {
   return (
     <>
       <PageHeader
+        eyebrow="HOLDING · SCHEDULE"
         title="Calendar"
         description={`${visibleCount.events} events · ${visibleCount.tasks} tasks visible`}
         actions={

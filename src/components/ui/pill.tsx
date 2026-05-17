@@ -8,53 +8,68 @@ import { cn } from "@/lib/utils"
  *
  * Two flavours:
  *   • `variant`: semantic intent (info / success / warning / danger / neutral / accent).
- *     Use this for state that has meaning (Active, Overdue, Error).
- *   • `tone`: tonal palette for data-driven coloring (blue, emerald, amber, rose,
- *     violet, slate, sky, indigo). Use when colour distinguishes data categories
- *     (e.g. each lead stage in a kanban, each team).
+ *     Use this for state with meaning (Active, Overdue).
+ *   • `tone`: tonal palette for data-driven coloring. The tone *keys* are kept
+ *     stable (blue, emerald, amber, rose, violet, slate, sky, indigo) for
+ *     backwards compatibility, but each maps to the editorial palette
+ *     (jade / plum / ochre / graphite / terracota). No Tailwind rainbow.
  *
- * Pick exactly one. If both are set, `tone` wins (it's the more specific intent).
+ * Pick exactly one. If both are set, `tone` wins.
  */
 
 const pillVariants = cva(
-  "inline-flex w-fit shrink-0 items-center gap-1 whitespace-nowrap font-medium ring-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+  "inline-flex w-fit shrink-0 items-center gap-1 whitespace-nowrap font-medium border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
   {
     variants: {
-      // Semantic intents — preferred for state.
+      // Semantic intents.
       variant: {
-        neutral: "bg-secondary text-secondary-foreground ring-border",
-        info:    "bg-info/10 text-info ring-info/20",
-        success: "bg-success/10 text-success ring-success/20",
-        warning: "bg-warning/10 text-warning ring-warning/20",
-        danger:  "bg-destructive/10 text-destructive ring-destructive/20",
-        accent:  "bg-accent text-accent-foreground ring-accent",
+        neutral:
+          "bg-surface-3 text-text-primary border-border-subtle",
+        info:
+          "bg-[color-mix(in_oklch,var(--info)_12%,transparent)] text-info border-[color-mix(in_oklch,var(--info)_28%,transparent)]",
+        success:
+          "bg-[color-mix(in_oklch,var(--success)_12%,transparent)] text-success border-[color-mix(in_oklch,var(--success)_28%,transparent)]",
+        warning:
+          "bg-[color-mix(in_oklch,var(--warning)_14%,transparent)] text-warning border-[color-mix(in_oklch,var(--warning)_28%,transparent)]",
+        danger:
+          "bg-[color-mix(in_oklch,var(--destructive)_14%,transparent)] text-destructive border-[color-mix(in_oklch,var(--destructive)_28%,transparent)]",
+        accent:
+          "bg-accent text-accent-foreground border-border-subtle",
       },
-      // Tonal palettes — for data display (kanban stages, teams, etc.).
-      // Each one maps to a fixed Tailwind palette so it carries through dark
-      // mode (the `dark:` variants stay tonally consistent vs. the light).
+      // Tonal palette — every tone resolves to the editorial palette via tokens.
+      // Mapping rationale (kept stable across the codebase):
+      //   blue / sky / slate → graphite (neutral data)
+      //   indigo / violet     → plum
+      //   emerald             → jade (success-adjacent)
+      //   amber               → ochre (warm warning)
+      //   rose                → terracota (hot/danger)
       tone: {
-        blue:    "bg-blue-50 text-blue-700 ring-blue-100 dark:bg-blue-500/10 dark:text-blue-300 dark:ring-blue-500/20",
-        sky:     "bg-sky-50 text-sky-700 ring-sky-100 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/20",
-        indigo:  "bg-indigo-50 text-indigo-700 ring-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-300 dark:ring-indigo-500/20",
-        violet:  "bg-violet-50 text-violet-700 ring-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-500/20",
-        emerald: "bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/20",
-        amber:   "bg-amber-50 text-amber-800 ring-amber-100 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/20",
-        rose:    "bg-rose-50 text-rose-700 ring-rose-100 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/20",
-        slate:   "bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-500/15 dark:text-slate-300 dark:ring-slate-500/20",
+        blue:
+          "bg-surface-3 text-text-secondary border-border-subtle",
+        sky:
+          "bg-surface-3 text-text-secondary border-border-subtle",
+        slate:
+          "bg-surface-3 text-text-secondary border-border-subtle",
+        indigo:
+          "bg-[color-mix(in_oklch,var(--info)_12%,transparent)] text-info border-[color-mix(in_oklch,var(--info)_28%,transparent)]",
+        violet:
+          "bg-[color-mix(in_oklch,var(--info)_10%,transparent)] text-info border-[color-mix(in_oklch,var(--info)_22%,transparent)]",
+        emerald:
+          "bg-[color-mix(in_oklch,var(--success)_12%,transparent)] text-success border-[color-mix(in_oklch,var(--success)_28%,transparent)]",
+        amber:
+          "bg-[color-mix(in_oklch,var(--warning)_14%,transparent)] text-warning border-[color-mix(in_oklch,var(--warning)_28%,transparent)]",
+        rose:
+          "bg-[color-mix(in_oklch,var(--destructive)_14%,transparent)] text-destructive border-[color-mix(in_oklch,var(--destructive)_28%,transparent)]",
       },
       size: {
-        sm: "h-5 rounded-sm px-1.5 text-[10px]",
-        md: "h-6 rounded-md px-2 text-xs",
+        sm: "h-5 rounded-full px-1.5 text-[10px]",
+        md: "h-6 rounded-full px-2 text-[11px]",
       },
       uppercase: {
-        true: "uppercase tracking-wider",
+        true: "uppercase tracking-[0.08em]",
         false: "",
       },
     },
-    compoundVariants: [
-      // Don't let `tone` produce a separate visual override when no variant is given —
-      // both are mutually exclusive by intent. CVA picks the last matching class.
-    ],
     defaultVariants: {
       variant: "neutral",
       size: "sm",
@@ -81,9 +96,6 @@ export function Pill({
   children,
   ...props
 }: PillProps) {
-  // When a `tone` is provided, drop the variant so the tonal class set wins
-  // cleanly. cva merges in order — we use cn so the explicit tone classes
-  // come last and override the variant defaults.
   const resolvedVariant = tone ? undefined : variant
   return (
     <span

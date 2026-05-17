@@ -166,6 +166,7 @@ export function LeadsBoard() {
   return (
     <>
       <PageHeader
+        eyebrow="PIPELINE"
         title="Leads"
         description="Drag cards to move leads through the pipeline."
         actions={
@@ -227,11 +228,11 @@ export function LeadsBoard() {
               * viewport. pointer-events-none so they don't intercept drags. */}
             <span
               aria-hidden
-              className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-background to-transparent"
+              className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-background to-transparent"
             />
             <span
               aria-hidden
-              className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-background to-transparent"
+              className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-gradient-to-l from-background to-transparent"
             />
             <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-4 sm:snap-none">
               {LEAD_STAGES.map((stage) => {
@@ -243,20 +244,20 @@ export function LeadsBoard() {
                 return (
                   <div
                     key={stage.id}
-                    className="flex w-[280px] shrink-0 snap-start flex-col rounded-xl bg-muted/40 ring-1 ring-border"
+                    className="flex w-[284px] shrink-0 snap-start flex-col rounded-[var(--radius-lg)] bg-surface-3/40 ring-1 ring-border-subtle"
                   >
-                    <div className="flex flex-col gap-1 border-b border-border px-3 py-2.5">
-                      <div className="flex items-center gap-2">
-                        <Pill tone={stage.pillTone} size="sm" uppercase>
+                    <div className="flex flex-col gap-1.5 border-b border-border-subtle px-3 py-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-text-tertiary">
                           {stage.label}
-                        </Pill>
-                        <span className="text-xs font-medium text-muted-foreground">
+                        </p>
+                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-primary/30 px-1.5 font-mono text-[10px] tabular-nums text-primary">
                           {items.length}
                         </span>
                       </div>
-                      <p className="font-heading text-sm font-semibold tabular-nums tracking-tight">
+                      <p className="font-display text-[22px] leading-none tracking-[-0.02em] tabular-nums text-text-primary">
                         {money(total)}
-                        <span className="ml-0.5 text-[10px] font-medium text-muted-foreground">
+                        <span className="ml-0.5 font-sans text-[10px] font-medium text-text-tertiary">
                           /mo
                         </span>
                       </p>
@@ -269,11 +270,11 @@ export function LeadsBoard() {
                           {...provided.droppableProps}
                           className={cn(
                             "flex-1 space-y-2 p-2 transition-colors",
-                            snapshot.isDraggingOver && "bg-accent/40"
+                            snapshot.isDraggingOver && "bg-accent/50"
                           )}
                         >
                           {items.length === 0 && !snapshot.isDraggingOver && (
-                            <div className="rounded-md border border-dashed border-border p-3 text-center text-[11px] font-medium text-muted-foreground">
+                            <div className="rounded-md border border-dashed border-border-subtle p-3 text-center text-[11px] font-medium text-text-tertiary">
                               Drop leads here
                             </div>
                           )}
@@ -391,7 +392,7 @@ function FilterBar({
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2">
       <div className="relative max-w-sm flex-1">
-        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-text-tertiary" />
         <Input
           value={search}
           onChange={(e) => onSearch(e.target.value)}
@@ -509,15 +510,14 @@ function LeadCard({
       {...dragHandleProps}
       onClick={onOpen}
       className={cn(
-        "group/lead relative cursor-pointer rounded-lg border border-border bg-background p-3 pl-5 text-left shadow-sm transition-shadow hover:shadow-md",
-        isDragging && "shadow-lg ring-1 ring-primary/30"
+        "group/lead relative cursor-pointer rounded-[var(--radius-md)] border border-border-subtle bg-card p-3 pl-5 text-left shadow-[var(--shadow-paper-sm)] transition-[transform,box-shadow] duration-150 ease-[cubic-bezier(.2,.6,.2,1)] hover:-translate-y-px hover:shadow-[var(--shadow-paper-md)]",
+        isDragging && "rotate-[1.5deg] shadow-[var(--shadow-paper-lg)] ring-1 ring-primary/30"
       )}
     >
-      {/* Grip affordance — visible only on hover/drag, purely visual. */}
       <span
         aria-hidden
         className={cn(
-          "pointer-events-none absolute top-2 left-1 text-muted-foreground transition-opacity",
+          "pointer-events-none absolute top-2 left-1 text-text-tertiary transition-opacity",
           isDragging
             ? "opacity-100"
             : "opacity-0 group-hover/lead:opacity-100"
@@ -527,7 +527,9 @@ function LeadCard({
       </span>
 
       <div className="flex items-start justify-between gap-2">
-        <p className="font-medium leading-snug truncate">{lead.name}</p>
+        <p className="truncate text-[14px] font-medium leading-snug text-text-primary">
+          {lead.name}
+        </p>
         {temp && (
           <Pill tone={temp.pillTone} size="sm" dot className="shrink-0">
             {temp.label}
@@ -535,15 +537,15 @@ function LeadCard({
         )}
       </div>
       {lead.company && (
-        <p className="mt-0.5 truncate text-xs font-medium text-muted-foreground">
+        <p className="mt-0.5 truncate text-xs font-medium text-text-tertiary">
           {lead.company}
         </p>
       )}
 
-      <div className="mt-2.5 flex items-center justify-between gap-2">
-        <span className="text-xs font-semibold tabular-nums text-foreground">
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <span className="font-mono text-[12px] tabular-nums text-text-primary">
           {money(Number(lead.value || 0))}
-          <span className="ml-0.5 text-[10px] font-medium text-muted-foreground">
+          <span className="ml-0.5 font-sans text-[10px] font-medium text-text-tertiary">
             /mo
           </span>
         </span>
@@ -576,17 +578,17 @@ function LeadsBoardSkeleton() {
       {Array.from({ length: 5 }).map((_, i) => (
         <div
           key={i}
-          className="flex w-[280px] shrink-0 flex-col rounded-xl bg-muted/40 ring-1 ring-border"
+          className="flex w-[284px] shrink-0 flex-col rounded-[var(--radius-lg)] bg-surface-3/40 ring-1 ring-border-subtle"
         >
-          <div className="flex flex-col gap-1 border-b border-border px-3 py-2.5">
-            <Skeleton className="h-4 w-20" />
-            <Skeleton className="h-4 w-24" />
+          <div className="flex flex-col gap-1.5 border-b border-border-subtle px-3 py-3">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="h-6 w-24" />
           </div>
           <div className="space-y-2 p-2">
             {Array.from({ length: 3 - (i % 2) }).map((_, j) => (
               <div
                 key={j}
-                className="space-y-2 rounded-lg border border-border bg-background p-3"
+                className="space-y-2 rounded-[var(--radius-md)] border border-border-subtle bg-card p-3"
               >
                 <Skeleton className="h-3 w-32" />
                 <Skeleton className="h-2.5 w-20" />
@@ -639,7 +641,7 @@ function QuickAddLead({ stage }: { stage: LeadStage }) {
           // Focus on next paint when the input mounts.
           requestAnimationFrame(() => inputRef.current?.focus())
         }}
-        className="m-2 mt-0 flex items-center justify-center gap-1.5 rounded-md border border-dashed border-border px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
+        className="m-2 mt-0 flex items-center justify-center gap-1.5 rounded-md border border-dashed border-border-default px-2 py-1.5 text-xs text-text-tertiary transition-colors hover:border-text-secondary hover:text-text-secondary"
       >
         <Plus className="size-3.5" />
         Add lead
@@ -648,7 +650,7 @@ function QuickAddLead({ stage }: { stage: LeadStage }) {
   }
 
   return (
-    <div className="m-2 mt-0 space-y-1.5 rounded-md border border-border bg-background p-2">
+    <div className="m-2 mt-0 space-y-1.5 rounded-md border border-border-subtle bg-card p-2">
       <Input
         ref={inputRef}
         value={name}

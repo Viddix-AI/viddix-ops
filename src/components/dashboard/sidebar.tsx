@@ -4,6 +4,9 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { useCurrentProfile } from "@/hooks/use-profile"
+import { initials } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import {
   Activity as ActivityIcon,
@@ -27,23 +30,28 @@ export const NAV_ITEMS = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const me = useCurrentProfile()
 
   return (
     <aside
-      className="hidden w-60 shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:flex"
+      className="hidden w-64 shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:flex"
       style={{ background: "var(--sidebar)" }}
     >
       <div className="flex h-14 items-center gap-2.5 border-b border-sidebar-border px-5">
-        <span className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground shadow-sm">
-          <span className="font-heading text-sm font-semibold">V</span>
+        <span
+          className="font-display text-[28px] leading-none text-white"
+          style={{ fontFeatureSettings: '"ss01"', letterSpacing: "-0.04em" }}
+          aria-hidden
+        >
+          V
         </span>
-        <span className="font-heading text-sm font-semibold tracking-tight text-white">
+        <span className="text-[13px] font-medium tracking-[-0.01em] text-white">
           Viddix Ops
         </span>
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
-        <p className="px-2.5 pt-2 pb-1.5 text-[10px] font-semibold tracking-wider text-sidebar-foreground/70 uppercase">
+        <p className="px-2.5 pt-2 pb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-sidebar-foreground/60">
           Workspace
         </p>
         {NAV_ITEMS.map((item) => {
@@ -57,11 +65,11 @@ export function Sidebar() {
               href={item.href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors duration-150",
+                "relative flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors duration-150 ease-[cubic-bezier(.2,.6,.2,1)]",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-1 focus-visible:ring-offset-sidebar",
                 active
-                  ? "bg-sidebar-accent text-white before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-0.5 before:rounded-full before:bg-sidebar-primary"
-                  : "text-sidebar-foreground/85 hover:bg-white/[0.05] hover:text-white"
+                  ? "bg-white/[0.04] text-white before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-0.5 before:rounded-full before:bg-sidebar-primary"
+                  : "text-sidebar-foreground/85 hover:bg-white/[0.04] hover:text-white"
               )}
             >
               <Icon className="size-4 shrink-0" />
@@ -71,7 +79,22 @@ export function Sidebar() {
         })}
       </nav>
 
-      <div className="border-t border-sidebar-border p-3">
+      <div className="space-y-2 border-t border-sidebar-border p-3">
+        <div className="flex items-center gap-2.5 rounded-md px-2 py-1.5">
+          <Avatar size="sm" className="ring-1 ring-white/10">
+            <AvatarFallback className="bg-white/[0.06] text-[11px] font-medium text-white">
+              {initials(me.full_name)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[12px] font-medium leading-tight text-white">
+              {me.full_name}
+            </p>
+            <p className="mt-0.5 truncate text-[11px] leading-tight text-sidebar-foreground/60">
+              {me.email}
+            </p>
+          </div>
+        </div>
         <StorageStatus />
       </div>
     </aside>
@@ -110,7 +133,7 @@ function StorageStatus() {
       ? "Local store unavailable"
       : "Checking storage…"
   return (
-    <div className="flex items-center gap-2 px-2 py-1.5 text-xs text-sidebar-foreground/60">
+    <div className="flex items-center gap-2 px-2 py-1 text-[11px] text-sidebar-foreground/60">
       <span className={cn("size-1.5 rounded-full", tone)} />
       {label}
     </div>
