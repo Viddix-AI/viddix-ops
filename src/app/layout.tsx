@@ -18,6 +18,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${sans.variable} ${mono.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-background text-foreground">

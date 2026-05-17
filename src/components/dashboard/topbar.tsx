@@ -3,7 +3,8 @@
 import * as React from "react"
 import { useRouter } from "next/navigation"
 import { useQueryClient } from "@tanstack/react-query"
-import { Search, Bell } from "lucide-react"
+import { useTheme } from "next-themes"
+import { Bell, Check, Monitor, Moon, Search, Sun } from "lucide-react"
 import { toast } from "sonner"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -17,6 +18,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { cn } from "@/lib/utils"
 import { CommandPalette } from "./command-palette"
 import { useCurrentProfile } from "@/hooks/use-profile"
 import { ensureNotificationPermission } from "@/hooks/use-task-reminders"
@@ -29,6 +31,7 @@ export function Topbar() {
   const router = useRouter()
   const me = useCurrentProfile()
   const qc = useQueryClient()
+  const { theme, setTheme } = useTheme()
   const [paletteOpen, setPaletteOpen] = React.useState(false)
   // Detect Mac so the kbd hint shows ⌘ instead of Ctrl. Uses the
   // "store-info-from-previous-renders" pattern (see also Sidebar's
@@ -136,6 +139,40 @@ export function Topbar() {
               </div>
               <div className="text-xs text-muted-foreground">{me.email}</div>
             </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Theme
+            </DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => setTheme("light")}>
+              <Sun />
+              Light
+              <Check
+                className={cn(
+                  "ml-auto size-3.5",
+                  theme === "light" ? "opacity-100" : "opacity-0"
+                )}
+              />
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme("dark")}>
+              <Moon />
+              Dark
+              <Check
+                className={cn(
+                  "ml-auto size-3.5",
+                  theme === "dark" ? "opacity-100" : "opacity-0"
+                )}
+              />
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTheme("system")}>
+              <Monitor />
+              System
+              <Check
+                className={cn(
+                  "ml-auto size-3.5",
+                  theme === "system" ? "opacity-100" : "opacity-0"
+                )}
+              />
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={enableNotifications}>
               Enable task notifications
