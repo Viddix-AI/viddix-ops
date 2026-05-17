@@ -1,5 +1,6 @@
 import * as React from "react"
 
+import { KeyboardShortcutsClient } from "@/components/dashboard/keyboard-shortcuts"
 import { Sidebar } from "@/components/dashboard/sidebar"
 import { Topbar } from "@/components/dashboard/topbar"
 import { TaskRemindersClient } from "./task-reminders-client"
@@ -17,6 +18,7 @@ export default function DashboardLayout({
         <main className="flex-1 min-w-0">{children}</main>
       </div>
       <TaskRemindersClient />
+      <KeyboardShortcutsClient />
     </div>
   )
 }
