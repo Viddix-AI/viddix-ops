@@ -78,24 +78,29 @@ export function Sidebar() {
   )
 }
 
-function StorageStatus() {
-  // Show whether the localStorage-backed store is healthy. Using the
-  // store-info-from-previous-renders pattern (instead of useEffect) keeps the
-  // probe SSR-safe — first render reports "checking", a subsequent client
-  // render flips it to ok/down based on a tiny round-trip.
-  const [status, setStatus] = React.useState<"checking" | "ok" | "down">("checking")
-  const [checked, setChecked] = React.useState(false)
-  if (!checked && typeof window !== "undefined") {
-    setChecked(true)
-    try {
-      const probe = "__viddix_health__"
-      window.localStorage.setItem(probe, "1")
-      window.localStorage.removeItem(probe)
-      setStatus("ok")
-    } catch {
-      setStatus("down")
-    }
+// useSyncExternalStore is the React-blessed way to read a value that differs
+// between server and client without tripping the hydration-mismatch warning:
+// the server snapshot renders first, hydration matches it exactly, and React
+// then schedules a post-commit re-render with the client snapshot.
+const STORAGE_SUBSCRIBE = () => () => {}
+const STORAGE_SERVER_SNAPSHOT = () => "checking" as const
+const STORAGE_CLIENT_SNAPSHOT = (): "ok" | "down" => {
+  try {
+    const probe = "__viddix_health__"
+    window.localStorage.setItem(probe, "1")
+    window.localStorage.removeItem(probe)
+    return "ok"
+  } catch {
+    return "down"
   }
+}
+
+function StorageStatus() {
+  const status = React.useSyncExternalStore(
+    STORAGE_SUBSCRIBE,
+    STORAGE_CLIENT_SNAPSHOT,
+    STORAGE_SERVER_SNAPSHOT,
+  )
   const tone =
     status === "ok" ? "bg-emerald-400" : status === "down" ? "bg-rose-400" : "bg-amber-400"
   const label =
