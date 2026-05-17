@@ -98,7 +98,7 @@ function read(): DB {
           : legacy
           ? [legacy]
           : []
-        return { ...t, assignee_ids: ids }
+        return { ...t, assignee_ids: ids, link: t.link ?? null }
       }),
       events:          parsed.events          ?? fresh.events,
       notes:           parsed.notes           ?? fresh.notes,
@@ -411,6 +411,7 @@ const localStore = {
       priority: input.priority ?? "medium",
       status: input.status ?? "todo",
       assignee_ids: input.assignee_ids ?? [],
+      link: input.link ?? null,
       client_id: input.client_id ?? null,
       lead_id: input.lead_id ?? null,
       created_at: now(),

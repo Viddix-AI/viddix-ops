@@ -333,6 +333,7 @@ export const supabaseBackend: Backend = {
         priority: input.priority ?? "medium",
         status: input.status ?? "todo",
         assignee_ids: input.assignee_ids ?? [],
+        link: input.link ?? null,
         client_id: input.client_id ?? null,
         lead_id: input.lead_id ?? null,
       })

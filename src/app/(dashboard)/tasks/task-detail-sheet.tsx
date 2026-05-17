@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Trash2 } from "lucide-react"
+import { ExternalLink, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -152,6 +152,34 @@ export function TaskDetailSheet({
               value={task.assignee_ids}
               onChange={(next) => patch({ assignee_ids: next })}
             />
+          </Field>
+
+          <Field label="Link">
+            <div className="flex gap-2">
+              <Input
+                type="url"
+                defaultValue={task.link ?? ""}
+                placeholder="https://…"
+                onBlur={(e) => {
+                  const v = e.target.value.trim()
+                  if (v !== (task.link ?? "")) {
+                    patch({ link: v || null })
+                  }
+                }}
+              />
+              {task.link && (
+                <a
+                  href={task.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="grid size-9 shrink-0 place-items-center rounded-[var(--radius-md)] border border-border-subtle bg-card text-text-secondary transition-colors hover:bg-surface-3 hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                  title="Open link in a new tab"
+                  aria-label="Open link in a new tab"
+                >
+                  <ExternalLink className="size-4" />
+                </a>
+              )}
+            </div>
           </Field>
 
           <div className="pt-2">

@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { CheckSquare } from "lucide-react"
+import { CheckSquare, ExternalLink } from "lucide-react"
 
 import {
   Select,
@@ -210,6 +210,19 @@ export function TasksView() {
                         <PriorityBadge priority={task.priority} />
                         <TaskStatusBadge status={task.status} />
                       </div>
+                      {task.link && (
+                        <a
+                          href={task.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          title={task.link}
+                          aria-label="Open task link in a new tab"
+                          className="grid size-7 shrink-0 place-items-center rounded-sm text-text-tertiary transition-colors hover:bg-surface-3 hover:text-text-primary"
+                        >
+                          <ExternalLink className="size-3.5" />
+                        </a>
+                      )}
                       <AvatarStack profiles={assignees} max={3} size="sm" />
                       <span className="w-16 shrink-0 text-right font-mono text-[11px] tabular-nums text-text-tertiary">
                         {relativeDay(task.due_date)}

@@ -135,6 +135,9 @@ export type Task = {
   // The data-store healer maps legacy single-assignee rows to a one-element
   // array on read, so existing payloads keep working without a migration.
   assignee_ids: string[]
+  // Optional reference URL — Notion page, GDoc, Linear ticket, anything the
+  // task points at. Saved verbatim, validation only happens at the input.
+  link: string | null
   client_id: string | null
   lead_id: string | null
   created_at: string
