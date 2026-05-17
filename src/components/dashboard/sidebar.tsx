@@ -34,10 +34,7 @@ export function Sidebar() {
       style={{ background: "var(--sidebar)" }}
     >
       <div className="flex h-14 items-center gap-2.5 border-b border-sidebar-border px-5">
-        <span
-          className="grid size-7 place-items-center rounded-md text-white shadow-sm"
-          style={{ background: "#4F8EF7" }}
-        >
+        <span className="grid size-7 place-items-center rounded-md bg-primary text-primary-foreground shadow-sm">
           <span className="font-heading text-sm font-semibold">V</span>
         </span>
         <span className="font-heading text-sm font-semibold tracking-tight text-white">

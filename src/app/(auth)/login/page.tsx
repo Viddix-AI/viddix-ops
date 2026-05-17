@@ -73,10 +73,7 @@ function LoginInner() {
       <div className="flex items-center justify-center bg-background px-6 py-12">
         <div className="w-full max-w-sm">
           <Link href="/" className="mb-10 flex items-center gap-2">
-            <span
-              className="grid size-8 place-items-center rounded-lg text-primary-foreground"
-              style={{ background: "#4F8EF7" }}
-            >
+            <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground">
               <span className="font-heading text-base font-semibold">V</span>
             </span>
             <span className="font-heading text-lg font-semibold tracking-tight">
@@ -162,10 +159,10 @@ function LoginInner() {
       </div>
 
       <div
-        className="relative hidden lg:block"
+        className="relative hidden bg-sidebar lg:block"
         style={{
-          background:
-            "radial-gradient(1200px 600px at 80% 10%, rgba(79,142,247,.25), transparent 60%), linear-gradient(135deg, #0f172a 0%, #1e293b 100%)",
+          backgroundImage:
+            "radial-gradient(1200px 600px at 80% 10%, color-mix(in oklab, var(--primary) 25%, transparent), transparent 60%), linear-gradient(135deg, var(--sidebar) 0%, var(--sidebar-accent) 100%)",
         }}
       >
         <div className="absolute inset-0 flex flex-col justify-end p-12 text-slate-200">

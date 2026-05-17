@@ -150,7 +150,7 @@ export function TasksView() {
             <h3
               className={cn(
                 "mb-2 text-xs font-semibold uppercase tracking-wider",
-                group === "overdue" ? "text-rose-600" : "text-muted-foreground"
+                group === "overdue" ? "text-destructive" : "text-muted-foreground"
               )}
             >
               {GROUP_LABELS[group]} · {items.length}
