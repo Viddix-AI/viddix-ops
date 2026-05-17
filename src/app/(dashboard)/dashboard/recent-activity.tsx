@@ -149,7 +149,11 @@ export function RecentActivity({ limit = DEFAULT_LIMIT }: { limit?: number }) {
                       const href = hrefFor(a)
                       const row = (
                         <div className="flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-surface-3">
-                          <Pill tone={tone} size="sm" className="size-6 px-0">
+                          <Pill
+                            tone={tone}
+                            size="sm"
+                            className="size-6 justify-center px-0"
+                          >
                             <Icon className="size-3" />
                           </Pill>
                           <p className="min-w-0 flex-1 truncate text-sm font-medium text-text-primary">

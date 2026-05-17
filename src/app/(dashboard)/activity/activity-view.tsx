@@ -148,7 +148,11 @@ export function ActivityView() {
                     const href = hrefFor(a)
                     const inner = (
                       <div className="flex items-center gap-3 rounded-md border border-border-subtle bg-card p-3">
-                        <Pill tone={tone} size="md" className="h-8 w-8 px-0">
+                        <Pill
+                          tone={tone}
+                          size="md"
+                          className="h-8 w-8 justify-center px-0"
+                        >
                           <Icon className="size-3.5" />
                         </Pill>
                         <div className="min-w-0 flex-1">

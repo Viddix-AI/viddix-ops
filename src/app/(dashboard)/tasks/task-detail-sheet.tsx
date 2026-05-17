@@ -21,9 +21,15 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { AssigneeMultiSelect } from "@/components/dashboard/assignee-multi-select"
+import { useClients } from "@/hooks/use-clients"
+import { useLeads } from "@/hooks/use-leads"
 import { useProfiles } from "@/hooks/use-profile"
 import { useDeleteTask, useUpdateTask } from "@/hooks/use-tasks"
 import type { Task, TaskPriority, TaskStatus } from "@/lib/types"
+
+// base-ui's Select can't use "" as a real item value; this sentinel maps to
+// "unlinked" so the user can clear a relation without a separate button.
+const NONE = "__none__"
 
 const PRIORITIES: { value: TaskPriority; label: string }[] = [
   { value: "low", label: "Low" },
@@ -48,6 +54,8 @@ export function TaskDetailSheet({
   onOpenChange: (o: boolean) => void
 }) {
   const { data: profiles = [] } = useProfiles()
+  const { data: leads = [] } = useLeads()
+  const { data: clients = [] } = useClients()
   const update = useUpdateTask()
   const remove = useDeleteTask()
 
@@ -153,6 +161,58 @@ export function TaskDetailSheet({
               onChange={(next) => patch({ assignee_ids: next })}
             />
           </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Lead">
+              <Select
+                value={task.lead_id ?? NONE}
+                onValueChange={(v) =>
+                  patch({ lead_id: !v || v === NONE ? null : v })
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>
+                    <span className="text-text-tertiary">None</span>
+                  </SelectItem>
+                  {leads.map((l) => (
+                    <SelectItem key={l.id} value={l.id}>
+                      <span className="truncate">
+                        {l.name}
+                        {l.company && (
+                          <span className="text-text-tertiary"> · {l.company}</span>
+                        )}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Client">
+              <Select
+                value={task.client_id ?? NONE}
+                onValueChange={(v) =>
+                  patch({ client_id: !v || v === NONE ? null : v })
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="None" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NONE}>
+                    <span className="text-text-tertiary">None</span>
+                  </SelectItem>
+                  {clients.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
 
           <Field label="Link">
             <div className="flex gap-2">

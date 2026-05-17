@@ -16,8 +16,10 @@ import { PageHeader } from "@/components/dashboard/page-header"
 import { PriorityBadge } from "@/components/dashboard/priority-badge"
 import { TaskStatusBadge } from "@/components/dashboard/status-badge"
 import { TeamBadge } from "@/components/dashboard/team-badge"
-import { useTasks, useUpdateTask } from "@/hooks/use-tasks"
+import { useClients } from "@/hooks/use-clients"
+import { useLeads } from "@/hooks/use-leads"
 import { useProfiles } from "@/hooks/use-profile"
+import { useTasks, useUpdateTask } from "@/hooks/use-tasks"
 import { relativeDay } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import {
@@ -48,6 +50,8 @@ const GROUP_LABELS: Record<Group, string> = {
 export function TasksView() {
   const { data: tasks = [] } = useTasks()
   const { data: profiles = [] } = useProfiles()
+  const { data: leads = [] } = useLeads()
+  const { data: clients = [] } = useClients()
   const update = useUpdateTask()
 
   const [filterAssignee, setFilterAssignee] = React.useState("")
@@ -184,6 +188,12 @@ export function TasksView() {
                   const assignees = task.assignee_ids
                     .map((id) => profiles.find((p) => p.id === id))
                     .filter((p): p is Profile => Boolean(p))
+                  const linkedLead = task.lead_id
+                    ? leads.find((l) => l.id === task.lead_id)
+                    : null
+                  const linkedClient = task.client_id
+                    ? clients.find((c) => c.id === task.client_id)
+                    : null
                   return (
                     <li
                       key={task.id}
@@ -197,15 +207,40 @@ export function TasksView() {
                         onChange={() => toggleDone(task)}
                         className="size-4 shrink-0 cursor-pointer accent-primary"
                       />
-                      <span
-                        className={cn(
-                          "flex-1 text-sm font-medium text-text-primary",
-                          task.status === "done" &&
-                            "text-text-tertiary line-through"
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className={cn(
+                            "truncate text-sm font-medium text-text-primary",
+                            task.status === "done" &&
+                              "text-text-tertiary line-through"
+                          )}
+                        >
+                          {task.title}
+                        </p>
+                        {(linkedLead || linkedClient) && (
+                          <p className="mt-0.5 truncate text-[11px] text-text-tertiary">
+                            {linkedLead && (
+                              <span>
+                                Lead ·{" "}
+                                <span className="text-text-secondary">
+                                  {linkedLead.name}
+                                </span>
+                              </span>
+                            )}
+                            {linkedLead && linkedClient && (
+                              <span className="mx-1.5">·</span>
+                            )}
+                            {linkedClient && (
+                              <span>
+                                Client ·{" "}
+                                <span className="text-text-secondary">
+                                  {linkedClient.name}
+                                </span>
+                              </span>
+                            )}
+                          </p>
                         )}
-                      >
-                        {task.title}
-                      </span>
+                      </div>
                       <div className="hidden items-center gap-2 sm:flex">
                         <PriorityBadge priority={task.priority} />
                         <TaskStatusBadge status={task.status} />
