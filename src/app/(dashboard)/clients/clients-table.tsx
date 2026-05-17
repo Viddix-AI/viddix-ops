@@ -33,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { TeamBadge } from "@/components/dashboard/team-badge"
@@ -57,11 +58,15 @@ const DENSITY_KEY = "viddix:clients-density"
 
 export function ClientsTable() {
   const router = useRouter()
-  const { data: clients = [] } = useClients()
+  const { data: clients = [], isFetching, isSuccess } = useClients()
   const { data: profiles = [] } = useProfiles()
   const create = useCreateClient()
   const update = useUpdateClient()
   const remove = useDeleteClient()
+  // First-ever fetch in flight — true once on mount until the first real
+  // result lands. `placeholderData: SEED_CLIENTS` keeps `data` non-undefined
+  // through the wait so the table chrome can paint immediately.
+  const isInitialLoad = isFetching && !isSuccess && clients.length === 0
 
   const [q, setQ] = React.useState("")
   const [team, setTeam] = React.useState<Team | "all">("all")
@@ -286,7 +291,9 @@ export function ClientsTable() {
           />
         )}
 
-        {filtered.length === 0 ? (
+        {isInitialLoad ? (
+          <ClientsTableSkeleton />
+        ) : filtered.length === 0 ? (
           <EmptyState
             icon={<Briefcase className="size-4" />}
             title="No clients found"
@@ -299,7 +306,7 @@ export function ClientsTable() {
             }
           />
         ) : (
-          <div className="rounded-xl bg-card ring-1 ring-border shadow-sm">
+          <div className="overflow-x-auto rounded-xl bg-card ring-1 ring-border shadow-sm">
             <table className="w-full text-sm">
               <thead
                 className={cn(
@@ -587,6 +594,35 @@ function RowActions({
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Skeleton
+// ─────────────────────────────────────────────────────────────────────────
+
+function ClientsTableSkeleton() {
+  return (
+    <div className="overflow-hidden rounded-xl bg-card ring-1 ring-border shadow-sm">
+      <div className="border-b border-border bg-muted/80 px-4 py-2.5">
+        <Skeleton className="h-3 w-24" />
+      </div>
+      <div className="divide-y divide-border">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 px-4 py-3">
+            <Skeleton className="size-4 rounded-sm" />
+            <div className="flex-1 space-y-1.5">
+              <Skeleton className="h-3 w-40" />
+              <Skeleton className="h-2.5 w-24" />
+            </div>
+            <Skeleton className="h-3 w-28" />
+            <Skeleton className="size-7 rounded-full" />
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-3 w-14" />
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 

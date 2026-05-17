@@ -33,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { UserAvatar } from "@/components/dashboard/user-avatar"
@@ -63,7 +64,8 @@ import { LeadDetailSheet } from "./lead-detail-sheet"
 import { AddLeadSheet } from "./add-lead-sheet"
 
 export function LeadsBoard() {
-  const { data: leads = [] } = useLeads()
+  const { data: leads = [], isFetching, isSuccess } = useLeads()
+  const isInitialLoad = isFetching && !isSuccess && leads.length === 0
   const { data: profiles = [] } = useProfiles()
   const { data: tasks = [] } = useTasks()
   const move = useMoveLead()
@@ -217,6 +219,8 @@ export function LeadsBoard() {
           teamCounts={teamCounts}
           totalLeads={leads.length}
         />
+        {isInitialLoad && <LeadsBoardSkeleton />}
+        {!isInitialLoad && (
         <DragDropContext onDragEnd={onDragEnd}>
           <div className="relative">
             {/* Edge fades so the user spots there's more pipeline beyond the
@@ -229,7 +233,7 @@ export function LeadsBoard() {
               aria-hidden
               className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-background to-transparent"
             />
-            <div className="flex gap-3 overflow-x-auto px-1 pb-4">
+            <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-4 sm:snap-none">
               {LEAD_STAGES.map((stage) => {
                 const items = byStage[stage.id]
                 const total = items.reduce(
@@ -239,7 +243,7 @@ export function LeadsBoard() {
                 return (
                   <div
                     key={stage.id}
-                    className="flex w-[280px] shrink-0 flex-col rounded-xl bg-muted/40 ring-1 ring-border"
+                    className="flex w-[280px] shrink-0 snap-start flex-col rounded-xl bg-muted/40 ring-1 ring-border"
                   >
                     <div className="flex flex-col gap-1 border-b border-border px-3 py-2.5">
                       <div className="flex items-center gap-2">
@@ -309,8 +313,9 @@ export function LeadsBoard() {
             </div>
           </div>
         </DragDropContext>
+        )}
 
-        {leads.length === 0 && (
+        {!isInitialLoad && leads.length === 0 && (
           <EmptyState
             icon={<Sparkles className="size-4" />}
             title="No leads yet"
@@ -558,6 +563,43 @@ function LeadCard({
         </div>
       )}
     </article>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Skeleton — shown while the very first leads fetch is in flight
+// ─────────────────────────────────────────────────────────────────────────
+
+function LeadsBoardSkeleton() {
+  return (
+    <div className="flex gap-3 overflow-hidden px-1 pb-4">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div
+          key={i}
+          className="flex w-[280px] shrink-0 flex-col rounded-xl bg-muted/40 ring-1 ring-border"
+        >
+          <div className="flex flex-col gap-1 border-b border-border px-3 py-2.5">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+          <div className="space-y-2 p-2">
+            {Array.from({ length: 3 - (i % 2) }).map((_, j) => (
+              <div
+                key={j}
+                className="space-y-2 rounded-lg border border-border bg-background p-3"
+              >
+                <Skeleton className="h-3 w-32" />
+                <Skeleton className="h-2.5 w-20" />
+                <div className="flex items-center justify-between pt-1">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="size-6 rounded-full" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   )
 }
 

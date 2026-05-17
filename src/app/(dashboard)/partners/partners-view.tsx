@@ -6,6 +6,7 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { useClients } from "@/hooks/use-clients"
@@ -22,7 +23,8 @@ import { AddPartnerDialog } from "./add-partner-dialog"
 import { EditPartnerDialog } from "./edit-partner-dialog"
 
 export function PartnersView() {
-  const { data: partners = [] } = usePartners()
+  const { data: partners = [], isFetching, isSuccess } = usePartners()
+  const isInitialLoad = isFetching && !isSuccess && partners.length === 0
   const { data: links = [] } = useClientPartners()
   const { data: clients = [] } = useClients()
   const update = useUpdatePartner()
@@ -77,7 +79,9 @@ export function PartnersView() {
       />
 
       <div className="space-y-4 px-4 py-5 lg:px-6">
-        {partners.length === 0 ? (
+        {isInitialLoad ? (
+          <PartnersSkeleton />
+        ) : partners.length === 0 ? (
           <EmptyState
             icon={<Handshake className="size-4" />}
             title="No partners yet"
@@ -191,6 +195,36 @@ export function PartnersView() {
         onOpenChange={(o) => !o && setEditId(null)}
       />
     </>
+  )
+}
+
+function PartnersSkeleton() {
+  return (
+    <ul className="grid gap-3 lg:grid-cols-2">
+      {Array.from({ length: 4 }).map((_, i) => (
+        <li
+          key={i}
+          className="flex flex-col gap-3 rounded-xl bg-card p-4 ring-1 ring-border shadow-sm"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 space-y-1.5">
+              <Skeleton className="h-3.5 w-32" />
+              <Skeleton className="h-2.5 w-24" />
+            </div>
+            <Skeleton className="size-7 rounded-md" />
+          </div>
+          <div className="grid grid-cols-3 gap-3 rounded-md border border-border bg-muted/30 p-3">
+            {Array.from({ length: 3 }).map((__, j) => (
+              <div key={j} className="space-y-1">
+                <Skeleton className="h-2 w-14" />
+                <Skeleton className="h-4 w-12" />
+              </div>
+            ))}
+          </div>
+          <Skeleton className="h-8 w-full" />
+        </li>
+      ))}
+    </ul>
   )
 }
 
