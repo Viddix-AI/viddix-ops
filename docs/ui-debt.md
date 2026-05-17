@@ -6,29 +6,6 @@ absorb it. **Don't fix here silently** — file the work where it belongs.
 
 ## Pending
 
-### Hard-coded `#4F8EF7` brand colour inline
-
-- `src/app/(auth)/login/page.tsx` — V-logo background + radial-gradient hero.
-- `src/components/dashboard/sidebar.tsx` — V-logo background.
-
-**Fix**: replace with `bg-primary` / use a CSS var. Fase 6 polish.
-
-### Activity feed icon tones — non-semantic
-
-- `src/app/(dashboard)/activity/activity-view.tsx:29-48` — the `ICONS`
-  table hardcodes `bg-blue-100 text-blue-700` etc. per `ActivityKind`.
-
-**Fix**: feed each icon through a `Pill tone={...}` mapping that lives in
-the same table. Fase 6 polish.
-
-### Overdue group label colour
-
-- `src/app/(dashboard)/tasks/tasks-view.tsx:151` —
-  `group === "overdue" ? "text-rose-600" : "text-muted-foreground"`.
-
-**Fix**: `text-destructive` is the semantic equivalent now that
-`--destructive` carries AA contrast. Fase 6 polish.
-
 ### `--radius` legacy variable
 
 `globals.css` still defines `--radius: 0.625rem` for shadcn compat (some
@@ -64,3 +41,10 @@ the codebase reads `var(--radius)` directly, we can drop it.
 - ✅ Calendar: Month/Week/Day/Agenda views + right rail with mini calendar + today's agenda (Fase 5)
 - ✅ Calendar today marker → `bg-primary` (was `bg-foreground`, pure black) (Fase 5)
 - ✅ Empty calendar days surface a hover "+ Add event" inline in Week view (Fase 5)
+- ✅ Dark mode toggle (next-themes) — Light/Dark/System in the avatar dropdown (Fase 6)
+- ✅ Inline `#4F8EF7` in login + sidebar V-logo → `bg-primary` + token-based gradient (Fase 6)
+- ✅ Activity feed `ICONS` table → `PillTone` + `Pill` primitive (Fase 6)
+- ✅ Tasks overdue header `text-rose-600` → `text-destructive` (Fase 6)
+- ✅ Global keyboard shortcuts + `?` cheatsheet modal (Fase 6)
+- ✅ Skeleton loaders on Clients / Leads / Partners first fetch (Fase 6)
+- ✅ Responsive: clients table h-scroll, kanban mobile snap-scroll (Fase 6)

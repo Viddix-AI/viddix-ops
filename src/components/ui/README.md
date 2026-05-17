@@ -47,6 +47,7 @@ spirit but in the `dashboard/` folder, because they pull data from hooks.
 | `CommandPalette` | Fase 1 — cmdk-powered ⌘K palette. Mounted in `Topbar`; open via Cmd/Ctrl+K. Groups: Pages, Actions, Leads, Clients, Partners, Tasks. |
 | `PipelineFunnel` | Fase 2 — horizontal funnel of leads stages with conversion % between stages. Used on the dashboard; expects `Lead[]`. |
 | `RecentActivity` | Fase 2 — `useActivities()` feed grouped by day with avatars + relative time. Used on the dashboard. |
+| `KeyboardShortcutsClient` | Fase 6 — mounts global key bindings + `?` cheatsheet modal. Mount once in the dashboard layout. |
 | `EmptyState` | Standard "no data yet" surface. `size="default"` for routes, `size="sm"` for in-sheet/in-tab usage (Fase 1). |
 | `PageHeader` | Title + description + actions; renders ~28-px H1. |
 | `PriorityBadge` / `TaskStatusBadge` / `TeamBadge` | Thin wrappers over `Pill` with a domain enum → tone/variant mapping. |
