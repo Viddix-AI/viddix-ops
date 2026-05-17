@@ -21,13 +21,6 @@ absorb it. **Don't fix here silently** — file the work where it belongs.
 **Fix**: feed each icon through a `Pill tone={...}` mapping that lives in
 the same table. Fase 6 polish.
 
-### Inline filter-chip dot colors in leads-board
-
-- `src/app/(dashboard)/leads/leads-board.tsx:244` —
-  `t.id === "madrid" ? "bg-blue-500" : "bg-emerald-500"`.
-
-**Fix**: derive from `TEAMS[].pillTone` via a small helper. Fase 4.
-
 ### Overdue group label colour
 
 - `src/app/(dashboard)/tasks/tasks-view.tsx:151` —
@@ -63,3 +56,8 @@ the codebase reads `var(--radius)` directly, we can drop it.
 - ✅ Hand-rolled recent activity → `RecentActivity` from `useActivities()`, grouped by day (Fase 2)
 - ✅ Clients table: density toggle, sticky header, sort polish, multi-select + bulk actions, inline owner edit, per-row menu (Fase 3)
 - ✅ `useDeleteClient` + cascade semantics on localStorage backend (Fase 3)
+- ✅ Leads kanban: unified Search + Temperature + Team filter bar with Reset (Fase 4)
+- ✅ Column header totals destacados (own line, font-semibold) (Fase 4)
+- ✅ Horizontal scroll fades on the kanban edges (Fase 4)
+- ✅ Lead card: temperature `Pill`, due-date pill from open tasks, hover-only grip handle (Fase 4)
+- ✅ Inline `t.id === "madrid" ? bg-blue : bg-emerald` → `TEAMS[].dot` field (Fase 4)

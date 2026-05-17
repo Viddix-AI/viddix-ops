@@ -250,6 +250,8 @@ export const TEAMS: {
   label: string
   short: string
   pillTone: DataTone
+  /** Solid colour class for the small dot used in filter chips. */
+  dot: string
   avatarTone: string
   ringTone: string
 }[] = [
@@ -258,6 +260,7 @@ export const TEAMS: {
     label: "Madrid",
     short: "MAD",
     pillTone: "blue",
+    dot: "bg-blue-500",
     avatarTone: "bg-blue-100 text-blue-700",
     ringTone: "ring-blue-400",
   },
@@ -266,6 +269,7 @@ export const TEAMS: {
     label: "US",
     short: "US",
     pillTone: "emerald",
+    dot: "bg-emerald-500",
     avatarTone: "bg-emerald-100 text-emerald-700",
     ringTone: "ring-emerald-400",
   },
