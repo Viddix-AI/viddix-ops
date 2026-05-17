@@ -61,3 +61,6 @@ the codebase reads `var(--radius)` directly, we can drop it.
 - ✅ Horizontal scroll fades on the kanban edges (Fase 4)
 - ✅ Lead card: temperature `Pill`, due-date pill from open tasks, hover-only grip handle (Fase 4)
 - ✅ Inline `t.id === "madrid" ? bg-blue : bg-emerald` → `TEAMS[].dot` field (Fase 4)
+- ✅ Calendar: Month/Week/Day/Agenda views + right rail with mini calendar + today's agenda (Fase 5)
+- ✅ Calendar today marker → `bg-primary` (was `bg-foreground`, pure black) (Fase 5)
+- ✅ Empty calendar days surface a hover "+ Add event" inline in Week view (Fase 5)
