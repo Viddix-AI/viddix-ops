@@ -311,7 +311,12 @@ export function ClientsTable() {
             <table className="w-full text-sm">
               <thead
                 className={cn(
-                  "sticky top-14 z-10 border-b border-border-subtle bg-surface-3 font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-text-tertiary backdrop-blur",
+                  // Header stays at the top of the table card. The previous
+                  // `sticky top-14` placed it 56px into the scroll container,
+                  // which (because the wrapper has overflow-x-auto and creates
+                  // its own sticky context) ended up shoving the thead over the
+                  // first body row and visually hiding it.
+                  "border-b border-border-subtle bg-surface-3 font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-text-tertiary",
                   "[&_tr]:rounded-t-[var(--radius-lg)]"
                 )}
               >
