@@ -2,9 +2,7 @@
 // when NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY are set;
 // otherwise the localStorage backend in data-store.ts wins.
 //
-// Tables / columns mirror src/supabase/migrations/001_init.sql plus
-// 002_partners_temperature.sql. Activity feed is local-only — Supabase
-// doesn't have an activities table yet.
+// Tables / columns mirror src/supabase/migrations/001_init.sql onwards.
 "use client"
 
 import { createClient } from "@/lib/supabase/client"
@@ -30,38 +28,55 @@ function unwrap<T>({ data, error }: { data: T | null; error: { message: string }
   return data
 }
 
-// ── Activity feed (local-only fallback) ──────────────────────────────────────
-// We keep the activity log in localStorage even when Supabase is wired so
-// existing UI keeps working. A future migration can move this server-side.
-const ACT_KEY = "viddix-ops:activities-v1"
-function readActivities(): Activity[] {
-  if (typeof window === "undefined") return []
+// ── Activity feed ────────────────────────────────────────────────────────────
+// Lives in Postgres now (migration 008) so it's shared across the team. The
+// helper is fire-and-forget: a failed insert just means the audit log loses
+// one row — never a user-visible error. The actor_id is resolved from the
+// auth session so we don't have to thread the current user through every
+// mutation site.
+async function currentActorId(): Promise<string | null> {
   try {
-    return JSON.parse(window.localStorage.getItem(ACT_KEY) ?? "[]") as Activity[]
+    const { data } = await db().auth.getUser()
+    return data.user?.id ?? null
   } catch {
-    return []
+    return null
   }
 }
-function writeActivities(list: Activity[]) {
-  if (typeof window === "undefined") return
-  window.localStorage.setItem(ACT_KEY, JSON.stringify(list.slice(0, 500)))
-  window.dispatchEvent(new CustomEvent("viddix:store-changed"))
-}
-function logActivity(a: Omit<Activity, "id" | "created_at">) {
-  const all = readActivities()
-  all.unshift({
-    ...a,
-    id: crypto.randomUUID(),
-    created_at: new Date().toISOString(),
-  })
-  writeActivities(all)
+
+function logActivity(a: Omit<Activity, "id" | "created_at" | "actor_id"> & { actor_id?: string | null }) {
+  void (async () => {
+    const actor_id = a.actor_id ?? (await currentActorId())
+    const { error } = await db()
+      .from("activities")
+      .insert({
+        kind: a.kind,
+        message: a.message,
+        lead_id: a.lead_id,
+        client_id: a.client_id,
+        partner_id: a.partner_id,
+        task_id: a.task_id,
+        actor_id,
+      })
+    if (error) {
+      console.warn(`activity log failed (${a.kind}): ${error.message}`)
+      return
+    }
+    // useActivities() listens for this event and re-invalidates the feed
+    // query, so the new entry surfaces without needing each mutation site
+    // to invalidate ["activities"] explicitly.
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("viddix:store-changed"))
+    }
+  })()
 }
 
 export const supabaseBackend: Backend = {
   async reset() {
     // No-op against Supabase — destroying real production data on a click is
-    // not friendly. Local activity log is cleared so the UI feels fresh.
-    writeActivities([])
+    // not friendly. We only clear the activities log so the UI feels fresh
+    // without losing leads / clients / tasks.
+    const { error } = await db().from("activities").delete().not("id", "is", null)
+    if (error) console.warn(`reset (activities): ${error.message}`)
   },
 
   // ── reads ────────────────────────────────────────────────────────────────
@@ -98,7 +113,12 @@ export const supabaseBackend: Backend = {
     return unwrap(r, "client_partners")
   },
   async activities() {
-    return readActivities()
+    const r = await db()
+      .from("activities")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(500)
+    return unwrap(r, "activities") as Activity[]
   },
 
   async client(id) {
