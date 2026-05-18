@@ -3,7 +3,11 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createServerClient } from "@supabase/ssr"
 
-const PUBLIC_PATHS = ["/login", "/auth/callback"]
+// `/api/webhooks/*` is service-to-service traffic (e.g. Cal.com booking
+// webhooks) — there's no logged-in user, and the routes authenticate via
+// shared-secret HMAC instead. Leaving them behind the auth proxy would make
+// the source service hit /login and abandon the call.
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/api/webhooks"]
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request })
