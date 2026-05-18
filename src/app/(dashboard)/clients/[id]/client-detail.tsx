@@ -21,6 +21,7 @@ import {
 import { EditableTaskRow } from "@/components/dashboard/editable-task-row"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { PageHeader } from "@/components/dashboard/page-header"
+import { SendBookingLinkButton } from "@/components/dashboard/send-booking-link-button"
 import { UserAvatar } from "@/components/dashboard/user-avatar"
 import { useClient, useUpdateClient } from "@/hooks/use-clients"
 import { useEvents } from "@/hooks/use-events"
@@ -82,6 +83,7 @@ export function ClientDetail({ id }: { id: string }) {
             <ArrowLeft className="size-3.5" /> Back to clients
           </Link>
         }
+        actions={<SendBookingLinkButton calLink={me.cal_link} />}
       />
 
       <div className="space-y-6 px-4 py-5 lg:px-6">
@@ -233,6 +235,7 @@ function TasksTab({
   const create = useCreateTask()
   const [title, setTitle] = React.useState("")
   const [due, setDue] = React.useState("")
+  const [time, setTime] = React.useState("")
   return (
     <Card>
       <CardContent className="space-y-3 py-2">
@@ -250,6 +253,14 @@ function TasksTab({
               onChange={(e) => setDue(e.target.value)}
               className="h-9 flex-1"
             />
+            <Input
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              disabled={!due}
+              title="Optional time"
+              className="h-9 w-24"
+            />
             <Button
               disabled={!title.trim()}
               onClick={() =>
@@ -259,11 +270,13 @@ function TasksTab({
                     client_id: clientId,
                     assignee_ids: ownerId ? [ownerId] : [],
                     due_date: due || null,
+                    due_time: due && time ? time : null,
                   },
                   {
                     onSuccess: () => {
                       setTitle("")
                       setDue("")
+                      setTime("")
                       toast.success("Task added")
                     },
                   }

@@ -19,6 +19,9 @@ export type Profile = {
   email: string
   avatar_url: string | null
   role: string
+  // Personal Cal.com booking URL. Pasted manually in /settings, then surfaced
+  // as a "Send booking link" action on lead/client detail sheets.
+  cal_link: string | null
   created_at: string
 }
 
@@ -102,6 +105,7 @@ export type ActivityKind =
   | "partner_detached"
   | "note_created"
   | "event_created"
+  | "event_updated"
   | "demo_reset"
 
 export type Activity = {
@@ -123,6 +127,11 @@ export type Task = {
   title: string
   description: string | null
   due_date: string | null
+  // Optional clock-time for the due date, "HH:MM" (24h). When set, the task
+  // shows as a positioned block in the calendar hour grid; when null it lives
+  // in the all-day lane. Storing date and time separately lets users keep the
+  // "due someday this day" semantics that a single timestamptz would lose.
+  due_time: string | null
   priority: TaskPriority
   status: TaskStatus
   // Multi-assignee: a task can be shared by several people on the team.
@@ -148,6 +157,9 @@ export type Event = {
   client_id: string | null
   lead_id: string | null
   attendees: string[]
+  // Set when an event originated from a Cal.com booking. Used by the webhook
+  // handler as an idempotency key so retries don't insert duplicates.
+  cal_booking_id: string | null
   created_at: string
 }
 

@@ -77,6 +77,7 @@ export function EditableTaskRow({ task }: { task: Task }) {
             {STATUSES.find((s) => s.value === task.status)?.label} ·{" "}
             {PRIORITIES.find((p) => p.value === task.priority)?.label} ·{" "}
             {relativeDay(task.due_date)}
+            {task.due_time && ` · ${task.due_time}`}
           </p>
         </button>
         <Button
@@ -143,7 +144,25 @@ export function EditableTaskRow({ task }: { task: Task }) {
               defaultValue={due}
               onBlur={(e) => {
                 const v = e.target.value || null
-                if (v !== (task.due_date ?? null)) patch({ due_date: v })
+                if (v !== (task.due_date ?? null)) {
+                  // Clearing the date drops the time — no anchor.
+                  patch({ due_date: v, due_time: v ? task.due_time : null })
+                }
+              }}
+              className="h-8"
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Due time
+            </span>
+            <Input
+              type="time"
+              defaultValue={task.due_time ?? ""}
+              disabled={!task.due_date}
+              onBlur={(e) => {
+                const v = e.target.value || null
+                if (v !== (task.due_time ?? null)) patch({ due_time: v })
               }}
               className="h-8"
             />

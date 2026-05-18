@@ -43,12 +43,17 @@ type Form = {
   description: string
 }
 
-function emptyForm(date: string): Form {
+function emptyForm(date: string, time?: string | null): Form {
+  const start = time ?? "10:00"
+  // Default end is start + 1h, capped at 23:00 so the input stays valid.
+  const [h, m] = start.split(":").map((n) => parseInt(n, 10))
+  const endH = Math.min(23, isNaN(h) ? 11 : h + 1)
+  const end = `${String(endH).padStart(2, "0")}:${String(isNaN(m) ? 0 : m).padStart(2, "0")}`
   return {
     title: "",
     date,
-    startTime: "10:00",
-    endTime: "11:00",
+    startTime: start,
+    endTime: end,
     type: "meeting",
     clientId: "",
     leadId: "",
@@ -60,24 +65,28 @@ export function AddEventDialog({
   open,
   onOpenChange,
   defaultDate,
+  defaultTime,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
   /** ISO date (YYYY-MM-DD) the dialog should pre-fill. Falls back to today. */
   defaultDate?: string | null
+  /** "HH:MM" the dialog should pre-fill as start time. Defaults to 10:00. */
+  defaultTime?: string | null
 }) {
   const today = new Date().toISOString().slice(0, 10)
   const initialDate = defaultDate ?? today
+  const initialTime = defaultTime ?? null
 
-  const [form, setForm] = React.useState<Form>(() => emptyForm(initialDate))
-  // Re-prime the form whenever the dialog re-opens with a different date.
+  const [form, setForm] = React.useState<Form>(() => emptyForm(initialDate, initialTime))
+  // Re-prime the form whenever the dialog re-opens with a different date/time.
   // Using the "store-info-from-previous-renders" pattern so we don't trip the
   // set-state-in-effect lint warning.
-  const [prevKey, setPrevKey] = React.useState(`${open}|${initialDate}`)
-  const key = `${open}|${initialDate}`
+  const [prevKey, setPrevKey] = React.useState(`${open}|${initialDate}|${initialTime ?? ""}`)
+  const key = `${open}|${initialDate}|${initialTime ?? ""}`
   if (key !== prevKey) {
     setPrevKey(key)
-    if (open) setForm(emptyForm(initialDate))
+    if (open) setForm(emptyForm(initialDate, initialTime))
   }
 
   const { data: clients = [] } = useClients()

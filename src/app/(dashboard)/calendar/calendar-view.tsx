@@ -17,13 +17,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { useClients } from "@/hooks/use-clients"
-import { useEvents } from "@/hooks/use-events"
+import { useEvents, useUpdateEvent } from "@/hooks/use-events"
 import { useLeads } from "@/hooks/use-leads"
-import { useTasks } from "@/hooks/use-tasks"
+import { useTasks, useUpdateTask } from "@/hooks/use-tasks"
 import { downloadFile } from "@/lib/csv"
 import { buildIcs, googleCalendarUrl, type IcsItem } from "@/lib/ics"
 import { cn } from "@/lib/utils"
 import { AddEventDialog } from "./add-event-dialog"
+import { TimeGrid } from "./time-grid"
 
 // ─────────────────────────────────────────────────────────────────────────
 // Shared bucketing — events + tasks grouped by ISO day key
@@ -95,15 +96,19 @@ export function CalendarView() {
   const { data: tasks = [] } = useTasks()
   const { data: clients = [] } = useClients()
   const { data: leads = [] } = useLeads()
+  const updateEvent = useUpdateEvent()
+  const updateTask = useUpdateTask()
 
   const [view, setView] = React.useState<CalendarView>("month")
   const [cursor, setCursor] = React.useState(() => startOfDay(new Date()))
   const [addOpen, setAddOpen] = React.useState(false)
   const [addDate, setAddDate] = React.useState<string | null>(null)
+  const [addTime, setAddTime] = React.useState<string | null>(null)
   const today = React.useMemo(() => startOfDay(new Date()), [])
 
-  function openCreate(date?: string) {
+  function openCreate(date?: string, time?: string) {
     setAddDate(date ?? null)
+    setAddTime(time ?? null)
     setAddOpen(true)
   }
 
@@ -333,23 +338,33 @@ export function CalendarView() {
               />
             )}
             {view === "week" && (
-              <WeekView
-                cursor={cursor}
-                today={today}
-                buckets={buckets}
+              <TimeGrid
+                days={Array.from({ length: 7 }, (_, i) =>
+                  addDays(startOfWeekMonday(cursor), i)
+                )}
+                events={events}
+                tasks={tasks}
                 onCreateAt={openCreate}
-                onSelectDay={(d) => {
-                  setCursor(startOfDay(d))
-                  setView("day")
-                }}
+                onUpdateEvent={(id, patch) =>
+                  updateEvent.mutate({ id, patch })
+                }
+                onUpdateTask={(id, patch) =>
+                  updateTask.mutate({ id, patch })
+                }
               />
             )}
             {view === "day" && (
-              <DayView
-                cursor={cursor}
-                today={today}
-                buckets={buckets}
+              <TimeGrid
+                days={[cursor]}
+                events={events}
+                tasks={tasks}
                 onCreateAt={openCreate}
+                onUpdateEvent={(id, patch) =>
+                  updateEvent.mutate({ id, patch })
+                }
+                onUpdateTask={(id, patch) =>
+                  updateTask.mutate({ id, patch })
+                }
               />
             )}
             {view === "agenda" && (
@@ -401,6 +416,7 @@ export function CalendarView() {
         open={addOpen}
         onOpenChange={setAddOpen}
         defaultDate={addDate}
+        defaultTime={addTime}
       />
     </>
   )
@@ -537,159 +553,6 @@ function MonthView({
         })}
       </div>
     </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// Week view
-// ─────────────────────────────────────────────────────────────────────────
-
-function WeekView({
-  cursor,
-  today,
-  buckets,
-  onCreateAt,
-  onSelectDay,
-}: {
-  cursor: Date
-  today: Date
-  buckets: Map<string, Item[]>
-  onCreateAt: (date: string) => void
-  onSelectDay: (d: Date) => void
-}) {
-  const start = React.useMemo(() => startOfWeekMonday(cursor), [cursor])
-  const days = React.useMemo(
-    () => Array.from({ length: 7 }, (_, i) => addDays(start, i)),
-    [start]
-  )
-
-  return (
-    <div className="overflow-hidden rounded-xl bg-card ring-1 ring-border shadow-sm">
-      <div className="grid grid-cols-7">
-        {days.map((d) => {
-          const key = isoDay(d)
-          const isToday = d.getTime() === today.getTime()
-          const items = buckets.get(key) ?? []
-          return (
-            <div
-              key={key}
-              className={cn(
-                "group/day flex min-h-[280px] flex-col border-r border-border last:border-r-0"
-              )}
-            >
-              <button
-                type="button"
-                onClick={() => onSelectDay(d)}
-                className="flex items-center justify-between border-b border-border bg-muted/30 px-2 py-1.5 text-left transition-colors hover:bg-muted"
-                title="Open day"
-              >
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {WEEKDAYS[(d.getDay() + 6) % 7]}
-                </span>
-                <span
-                  className={cn(
-                    "inline-grid size-6 place-items-center rounded-full text-sm font-semibold tabular-nums",
-                    isToday && "bg-primary text-primary-foreground"
-                  )}
-                >
-                  {d.getDate()}
-                </span>
-              </button>
-              <div className="relative flex-1 p-1.5">
-                <button
-                  type="button"
-                  onClick={() => onCreateAt(key)}
-                  className="invisible absolute right-1 top-1 inline-grid size-5 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground group-hover/day:visible"
-                  aria-label={`Add event on ${key}`}
-                  title="Add event"
-                >
-                  <Plus className="size-3" />
-                </button>
-                {items.length === 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => onCreateAt(key)}
-                    className="invisible w-full rounded-md border border-dashed border-border py-3 text-center text-[11px] font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground group-hover/day:visible"
-                  >
-                    + Add event
-                  </button>
-                ) : (
-                  <ul className="space-y-1.5">
-                    {items.map((it) => (
-                      <ItemRow key={`${it.kind}-${it.id}`} item={it} />
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// Day view
-// ─────────────────────────────────────────────────────────────────────────
-
-function DayView({
-  cursor,
-  today,
-  buckets,
-  onCreateAt,
-}: {
-  cursor: Date
-  today: Date
-  buckets: Map<string, Item[]>
-  onCreateAt: (date: string) => void
-}) {
-  const key = isoDay(cursor)
-  const items = buckets.get(key) ?? []
-  const isToday = cursor.getTime() === today.getTime()
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <span
-            className={cn(
-              "inline-grid size-7 place-items-center rounded-full text-sm font-semibold tabular-nums",
-              isToday && "bg-primary text-primary-foreground"
-            )}
-          >
-            {cursor.getDate()}
-          </span>
-          <span>
-            {cursor.toLocaleString("en-US", {
-              weekday: "long",
-              month: "long",
-            })}
-          </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {items.length === 0 ? (
-          <EmptyState
-            size="sm"
-            title="Nothing scheduled"
-            description="Add an event for this day."
-            action={
-              <Button size="sm" onClick={() => onCreateAt(key)}>
-                <Plus />
-                Add event
-              </Button>
-            }
-          />
-        ) : (
-          <ul className="space-y-2">
-            {items.map((it) => (
-              <ItemRow key={`${it.kind}-${it.id}`} item={it} expanded />
-            ))}
-          </ul>
-        )}
-      </CardContent>
-    </Card>
   )
 }
 

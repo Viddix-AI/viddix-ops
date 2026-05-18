@@ -104,7 +104,7 @@ export function TaskDetailSheet({
             />
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <Field label="Due date">
               <Input
                 type="date"
@@ -112,7 +112,22 @@ export function TaskDetailSheet({
                 onBlur={(e) => {
                   const v = e.target.value
                   if (v !== (task.due_date ?? "")) {
-                    patch({ due_date: v || null })
+                    // Clearing the date also clears the time — a time without
+                    // a date can't anchor anywhere.
+                    patch({ due_date: v || null, due_time: v ? task.due_time : null })
+                  }
+                }}
+              />
+            </Field>
+            <Field label="Due time">
+              <Input
+                type="time"
+                defaultValue={task.due_time ?? ""}
+                disabled={!task.due_date}
+                onBlur={(e) => {
+                  const v = e.target.value
+                  if (v !== (task.due_time ?? "")) {
+                    patch({ due_time: v || null })
                   }
                 }}
               />

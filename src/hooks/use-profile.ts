@@ -1,6 +1,6 @@
 "use client"
 
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { SUPABASE_CONFIGURED } from "@/lib/backend"
 import { store } from "@/lib/data-store"
@@ -41,6 +41,7 @@ export function useCurrentUser() {
         email: u.email ?? "",
         avatar_url: (u.user_metadata?.avatar_url as string | undefined) ?? null,
         role: "member",
+        cal_link: null,
         created_at: u.created_at,
       }
     },
@@ -55,4 +56,16 @@ export function useCurrentProfile(): Profile {
   // Prefer the auth-resolved user; fall back to the first profile in the
   // workspace if auth isn't ready yet.
   return user ?? profiles?.[0] ?? SEED_PROFILES[0]
+}
+
+export function useUpdateProfile() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, patch }: { id: string; patch: Partial<Profile> }) =>
+      store.updateProfile(id, patch),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profiles"] })
+      qc.invalidateQueries({ queryKey: ["current-user"] })
+    },
+  })
 }

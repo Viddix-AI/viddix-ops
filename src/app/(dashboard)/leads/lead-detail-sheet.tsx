@@ -24,6 +24,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs"
 import { EditableTaskRow } from "@/components/dashboard/editable-task-row"
 import { EmptyState } from "@/components/dashboard/empty-state"
+import { SendBookingLinkButton } from "@/components/dashboard/send-booking-link-button"
 import { useCreateNote, useNotesFor } from "@/hooks/use-notes"
 import { useCreateTask, useTasks } from "@/hooks/use-tasks"
 import { usePartners } from "@/hooks/use-partners"
@@ -85,6 +86,7 @@ function Inner({
   const [noteText, setNoteText] = React.useState("")
   const [taskTitle, setTaskTitle] = React.useState("")
   const [taskDue, setTaskDue] = React.useState("")
+  const [taskTime, setTaskTime] = React.useState("")
 
   return (
     <>
@@ -99,6 +101,7 @@ function Inner({
             )}
           </div>
           <div className="flex items-center gap-1.5">
+            <SendBookingLinkButton calLink={me.cal_link} />
             <Button
               size="sm"
               variant="outline"
@@ -361,6 +364,14 @@ function Inner({
                   onChange={(e) => setTaskDue(e.target.value)}
                   className="h-8 flex-1"
                 />
+                <Input
+                  type="time"
+                  value={taskTime}
+                  onChange={(e) => setTaskTime(e.target.value)}
+                  disabled={!taskDue}
+                  title="Optional time"
+                  className="h-8 w-24"
+                />
                 <Button
                   size="sm"
                   disabled={!taskTitle.trim()}
@@ -371,11 +382,13 @@ function Inner({
                         lead_id: lead.id,
                         assignee_ids: [lead.owner_id ?? me.id],
                         due_date: taskDue || null,
+                        due_time: taskDue && taskTime ? taskTime : null,
                       },
                       {
                         onSuccess: () => {
                           setTaskTitle("")
                           setTaskDue("")
+                          setTaskTime("")
                           toast.success("Task added")
                         },
                       }

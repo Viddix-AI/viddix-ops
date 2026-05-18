@@ -46,6 +46,7 @@ const ICONS: Record<ActivityKind, { icon: LucideIcon; tone: PillTone }> = {
   partner_detached: { icon: Trash2,      tone: "slate" },
   note_created:     { icon: Mail,        tone: "sky" },
   event_created:    { icon: CheckSquare, tone: "blue" },
+  event_updated:    { icon: Pencil,      tone: "slate" },
   demo_reset:       { icon: RotateCcw,   tone: "amber" },
 }
 

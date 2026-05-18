@@ -25,6 +25,15 @@ export function useCreateEvent() {
   })
 }
 
+export function useUpdateEvent() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, patch }: { id: string; patch: Partial<Event> }) =>
+      store.updateEvent(id, patch),
+    onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
+  })
+}
+
 export function useDeleteEvent() {
   const qc = useQueryClient()
   return useMutation({

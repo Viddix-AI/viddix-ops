@@ -224,8 +224,11 @@ export function TasksView() {
                         </a>
                       )}
                       <AvatarStack profiles={assignees} max={3} size="sm" />
-                      <span className="w-16 shrink-0 text-right font-mono text-[11px] tabular-nums text-text-tertiary">
-                        {relativeDay(task.due_date)}
+                      <span className="flex w-20 shrink-0 flex-col items-end font-mono text-[11px] tabular-nums text-text-tertiary">
+                        <span>{relativeDay(task.due_date)}</span>
+                        {task.due_time && (
+                          <span className="text-text-secondary">{task.due_time}</span>
+                        )}
                       </span>
                     </li>
                   )

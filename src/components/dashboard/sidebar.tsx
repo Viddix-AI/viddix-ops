@@ -15,6 +15,7 @@ import {
   Calendar,
   CheckSquare,
   Handshake,
+  Settings,
   Sparkles,
 } from "lucide-react"
 
@@ -26,6 +27,7 @@ export const NAV_ITEMS = [
   { href: "/tasks",      label: "Tasks",     icon: CheckSquare },
   { href: "/calendar",   label: "Calendar",  icon: Calendar },
   { href: "/activity",   label: "Activity",  icon: ActivityIcon },
+  { href: "/settings",   label: "Settings",  icon: Settings },
 ] as const
 
 export function Sidebar() {

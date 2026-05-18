@@ -35,7 +35,7 @@ import type {
 // keys are abandoned (the user's data on disk stays under the older key, but
 // a fresh seed is written here). Increment whenever a new required field is
 // added so refresh doesn't render with a half-shaped record.
-const KEY = "viddix-ops:v5"
+const KEY = "viddix-ops:v6"
 
 type DB = {
   profiles: Profile[]
@@ -98,9 +98,17 @@ function read(): DB {
           : legacy
           ? [legacy]
           : []
-        return { ...t, assignee_ids: ids, link: t.link ?? null }
+        return {
+          ...t,
+          assignee_ids: ids,
+          link: t.link ?? null,
+          due_time: t.due_time ?? null,
+        }
       }),
-      events:          parsed.events          ?? fresh.events,
+      events:          (parsed.events ?? fresh.events).map((e) => ({
+        ...e,
+        cal_booking_id: e.cal_booking_id ?? null,
+      })),
       notes:           parsed.notes           ?? fresh.notes,
       partners:        parsed.partners        ?? fresh.partners,
       client_partners: parsed.client_partners ?? fresh.client_partners,
@@ -408,6 +416,7 @@ const localStore = {
       title: input.title,
       description: input.description ?? null,
       due_date: input.due_date ?? null,
+      due_time: input.due_time ?? null,
       priority: input.priority ?? "medium",
       status: input.status ?? "todo",
       assignee_ids: input.assignee_ids ?? [],
@@ -463,6 +472,27 @@ const localStore = {
   // ── events ───────────────────────────────────────────────────────────────
   createEvent(input: Partial<Event> & { title: string; start_at: string }): Event {
     const db = read()
+    // Upsert by cal_booking_id so Cal.com webhook retries don't create
+    // duplicates. Internal events pass cal_booking_id=null and always insert.
+    if (input.cal_booking_id) {
+      const existing = db.events.find(
+        (e) => e.cal_booking_id === input.cal_booking_id
+      )
+      if (existing) {
+        Object.assign(existing, {
+          title: input.title,
+          description: input.description ?? existing.description,
+          start_at: input.start_at,
+          end_at: input.end_at ?? existing.end_at,
+          event_type: input.event_type ?? existing.event_type,
+          client_id: input.client_id ?? existing.client_id,
+          lead_id: input.lead_id ?? existing.lead_id,
+          attendees: input.attendees ?? existing.attendees,
+        })
+        write(db)
+        return existing
+      }
+    }
     const e: Event = {
       id: uid(),
       title: input.title,
@@ -473,6 +503,7 @@ const localStore = {
       client_id: input.client_id ?? null,
       lead_id: input.lead_id ?? null,
       attendees: input.attendees ?? [],
+      cal_booking_id: input.cal_booking_id ?? null,
       created_at: now(),
     }
     db.events.push(e)
@@ -484,10 +515,35 @@ const localStore = {
     return e
   },
 
+  updateEvent(id: string, patch: Partial<Event>): Event | null {
+    const db = read()
+    const e = db.events.find((x) => x.id === id)
+    if (!e) return null
+    Object.assign(e, patch)
+    record(db, "event_updated", `Event updated — ${e.title}`, {
+      lead_id: e.lead_id,
+      client_id: e.client_id,
+    })
+    write(db)
+    return e
+  },
+
   deleteEvent(id: string) {
     const db = read()
     db.events = db.events.filter((e) => e.id !== id)
     write(db)
+  },
+
+  // ── profiles ─────────────────────────────────────────────────────────────
+  // Profile rows are mostly read-only (auth.users mirror), but cal_link is
+  // user-editable from /settings. Kept minimal: no audit row, no triggers.
+  updateProfile(id: string, patch: Partial<Profile>): Profile | null {
+    const db = read()
+    const p = db.profiles.find((x) => x.id === id)
+    if (!p) return null
+    Object.assign(p, patch)
+    write(db)
+    return p
   },
 
   // ── partners ─────────────────────────────────────────────────────────────

@@ -15,6 +15,7 @@ import type {
   Lead,
   Note,
   Partner,
+  Profile,
   Task,
 } from "@/lib/types"
 
@@ -350,6 +351,7 @@ export const supabaseBackend: Backend = {
         title: input.title,
         description: input.description ?? null,
         due_date: input.due_date ?? null,
+        due_time: input.due_time ?? null,
         priority: input.priority ?? "medium",
         status: input.status ?? "todo",
         assignee_ids: input.assignee_ids ?? [],
@@ -373,25 +375,61 @@ export const supabaseBackend: Backend = {
 
   // ── events ───────────────────────────────────────────────────────────────
   async createEvent(input) {
-    const r = await db()
-      .from("events")
-      .insert({
-        title: input.title,
-        description: input.description ?? null,
-        start_at: input.start_at,
-        end_at: input.end_at ?? null,
-        event_type: input.event_type ?? "meeting",
-        client_id: input.client_id ?? null,
-        lead_id: input.lead_id ?? null,
-        attendees: input.attendees ?? [],
-      })
-      .select()
-      .single()
-    return unwrap(r, "createEvent") as Event
+    // Upsert by cal_booking_id (idempotency key for Cal.com webhook retries).
+    // Internal events leave it null and always insert.
+    const payload = {
+      title: input.title,
+      description: input.description ?? null,
+      start_at: input.start_at,
+      end_at: input.end_at ?? null,
+      event_type: input.event_type ?? "meeting",
+      client_id: input.client_id ?? null,
+      lead_id: input.lead_id ?? null,
+      attendees: input.attendees ?? [],
+      cal_booking_id: input.cal_booking_id ?? null,
+    }
+    const r = input.cal_booking_id
+      ? await db()
+          .from("events")
+          .upsert(payload, { onConflict: "cal_booking_id" })
+          .select()
+          .single()
+      : await db().from("events").insert(payload).select().single()
+    const event = unwrap(r, "createEvent") as Event
+    logActivity({
+      kind: "event_created",
+      message: `Event scheduled — ${event.title}`,
+      lead_id: event.lead_id,
+      client_id: event.client_id,
+      partner_id: null,
+      task_id: null,
+    })
+    return event
+  },
+  async updateEvent(id, patch) {
+    const r = await db().from("events").update(patch).eq("id", id).select().single()
+    if (r.error) throw new Error(`Supabase: updateEvent — ${r.error.message}`)
+    const event = r.data as Event
+    logActivity({
+      kind: "event_updated",
+      message: `Event updated — ${event.title}`,
+      lead_id: event.lead_id,
+      client_id: event.client_id,
+      partner_id: null,
+      task_id: null,
+    })
+    return event
   },
   async deleteEvent(id) {
     const r = await db().from("events").delete().eq("id", id)
     if (r.error) throw new Error(`Supabase: deleteEvent — ${r.error.message}`)
+  },
+
+  // ── profiles ─────────────────────────────────────────────────────────────
+  async updateProfile(id, patch) {
+    const r = await db().from("profiles").update(patch).eq("id", id).select().single()
+    if (r.error) throw new Error(`Supabase: updateProfile — ${r.error.message}`)
+    return r.data as Profile
   },
 
   // ── partners ─────────────────────────────────────────────────────────────

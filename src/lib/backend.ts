@@ -55,7 +55,11 @@ export interface Backend {
 
   // Events
   createEvent(input: Partial<Event> & { title: string; start_at: string }): Promise<Event>
+  updateEvent(id: string, patch: Partial<Event>):                           Promise<Event | null>
   deleteEvent(id: string):                                                  Promise<void>
+
+  // Profiles
+  updateProfile(id: string, patch: Partial<Profile>): Promise<Profile | null>
 
   // Partners
   partnersFor(clientId: string): Promise<(ClientPartner & { partner: Partner | null })[]>

@@ -21,6 +21,7 @@ export const SEED_PROFILES: Profile[] = [
     email: "pablo@viddix.ai",
     avatar_url: null,
     role: "founder",
+    cal_link: null,
     created_at: "2026-01-01T00:00:00Z",
   },
   {
@@ -29,6 +30,7 @@ export const SEED_PROFILES: Profile[] = [
     email: "capita@viddix.ai",
     avatar_url: null,
     role: "ops",
+    cal_link: null,
     created_at: "2026-01-01T00:00:00Z",
   },
   {
@@ -37,6 +39,7 @@ export const SEED_PROFILES: Profile[] = [
     email: "sanz@viddix.ai",
     avatar_url: null,
     role: "engineering",
+    cal_link: null,
     created_at: "2026-01-01T00:00:00Z",
   },
 ]
