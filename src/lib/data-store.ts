@@ -75,7 +75,7 @@ function read(): DB {
     // crashes on a missing key. New fields default; existing rows are kept.
     const fresh = seed()
     const healed: DB = {
-      // Pin profiles to fresh seed data so newly added fields (team, role
+      // Pin profiles to fresh seed data so newly added fields (role
       // tweaks) reach existing installs without forcing a hard reset.
       profiles:        fresh.profiles,
       clients:         parsed.clients         ?? fresh.clients,

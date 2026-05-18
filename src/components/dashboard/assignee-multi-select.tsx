@@ -9,7 +9,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
-import { TeamBadge } from "@/components/dashboard/team-badge"
 import { UserAvatar } from "@/components/dashboard/user-avatar"
 import { AvatarStack } from "@/components/dashboard/avatar-stack"
 import { cn } from "@/lib/utils"
@@ -120,7 +119,6 @@ export function AssigneeMultiSelect({
                     />
                     <UserAvatar profile={p} size="sm" />
                     <span className="flex-1 truncate">{p.full_name}</span>
-                    <TeamBadge team={p.team} />
                   </button>
                 </li>
               )

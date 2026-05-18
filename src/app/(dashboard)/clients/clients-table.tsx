@@ -36,7 +36,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/dashboard/empty-state"
 import { PageHeader } from "@/components/dashboard/page-header"
-import { TeamBadge } from "@/components/dashboard/team-badge"
 import { UserAvatar } from "@/components/dashboard/user-avatar"
 import {
   useClients,
@@ -47,7 +46,7 @@ import {
 import { useProfiles } from "@/hooks/use-profile"
 import { downloadCsv, parseCsv, pickCsvFile, toCsv } from "@/lib/csv"
 import { money } from "@/lib/format"
-import { TEAMS, type Client, type Profile, type Team } from "@/lib/types"
+import type { Client, Profile } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { AddClientDialog } from "./add-client-dialog"
 
@@ -69,7 +68,6 @@ export function ClientsTable() {
   const isInitialLoad = isFetching && !isSuccess && clients.length === 0
 
   const [q, setQ] = React.useState("")
-  const [team, setTeam] = React.useState<Team | "all">("all")
   const [sort, setSort] = React.useState<{ key: SortKey; dir: "asc" | "desc" }>(
     { key: "mrr", dir: "desc" }
   )
@@ -93,16 +91,9 @@ export function ClientsTable() {
     }
   }
 
-  const teamForClient = React.useCallback(
-    (c: Client): Team | null =>
-      profiles.find((p) => p.id === c.owner_id)?.team ?? null,
-    [profiles]
-  )
-
   const filtered = React.useMemo(() => {
     const needle = q.trim().toLowerCase()
     return clients
-      .filter((c) => (team === "all" ? true : teamForClient(c) === team))
       .filter((c) =>
         !needle
           ? true
@@ -116,7 +107,7 @@ export function ClientsTable() {
         if (sort.key === "mrr") return (Number(a.mrr) - Number(b.mrr)) * dir
         return (a.started_at ?? "").localeCompare(b.started_at ?? "") * dir
       })
-  }, [clients, q, team, teamForClient, sort])
+  }, [clients, q, sort])
 
   const totalMRR = clients.reduce((s, c) => s + Number(c.mrr || 0), 0)
 
@@ -253,19 +244,6 @@ export function ClientsTable() {
               className="h-9 pl-8"
             />
           </div>
-          <Select value={team} onValueChange={(v) => setTeam(v as Team | "all")}>
-            <SelectTrigger size="default" className="w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All teams</SelectItem>
-              {TEAMS.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
-                  {t.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
           <Select
             value={density}
             onValueChange={(v) => setDensity(v as Density)}
@@ -503,7 +481,7 @@ function ClientRow({
 
 /**
  * Owner cell — inline editable. When `owner` is set, shows the avatar +
- * name + team badge and clicking opens a Select for re-assignment. When
+ * name and clicking opens a Select for re-assignment. When
  * `owner` is null, shows a "+ Assign" chip that opens the same picker.
  *
  * Wired around shadcn's Select so the dropdown is portal-rendered and
@@ -540,7 +518,6 @@ function OwnerCell({
             <span className={cn("text-xs font-medium", compact && "sr-only")}>
               {owner.full_name}
             </span>
-            {!compact && <TeamBadge team={owner.team} />}
           </span>
         ) : (
           <span className="inline-flex items-center gap-1 text-xs font-medium">
@@ -555,10 +532,7 @@ function OwnerCell({
         </SelectItem>
         {profiles.map((p) => (
           <SelectItem key={p.id} value={p.id}>
-            <span className="inline-flex items-center gap-1.5">
-              {p.full_name}
-              <TeamBadge team={p.team} />
-            </span>
+            {p.full_name}
           </SelectItem>
         ))}
       </SelectContent>
@@ -678,7 +652,6 @@ function BulkActionBar({
             <DropdownMenuItem key={p.id} onClick={() => onAssignOwner(p.id)}>
               <UserAvatar profile={p} size="sm" />
               {p.full_name}
-              <TeamBadge team={p.team} />
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />

@@ -20,7 +20,6 @@ import {
 import { cn } from "@/lib/utils"
 import { CommandPalette } from "./command-palette"
 import { MobileNav } from "./mobile-nav"
-import { TeamBadge } from "./team-badge"
 import { useCurrentProfile } from "@/hooks/use-profile"
 import { ensureNotificationPermission } from "@/hooks/use-task-reminders"
 import { store } from "@/lib/data-store"
@@ -155,17 +154,13 @@ export function Topbar() {
             <Avatar size="sm">
               <AvatarFallback>{initials(me.full_name)}</AvatarFallback>
             </Avatar>
-            <span className="hidden items-center gap-1.5 text-xs font-medium text-text-primary sm:inline-flex">
+            <span className="hidden items-center text-xs font-medium text-text-primary sm:inline-flex">
               {me.full_name}
-              <TeamBadge team={me.team} />
             </span>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>
-              <div className="flex items-center gap-1.5 font-medium">
-                {me.full_name}
-                <TeamBadge team={me.team} />
-              </div>
+              <div className="font-medium">{me.full_name}</div>
               <div className="text-xs text-text-secondary">{me.email}</div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />

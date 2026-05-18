@@ -19,7 +19,6 @@ import {
   Sparkles,
   Thermometer,
   Upload,
-  Users,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -52,12 +51,10 @@ import { money, relativeDay } from "@/lib/format"
 import {
   LEAD_STAGES,
   LEAD_TEMPERATURES,
-  TEAMS,
   type Lead,
   type LeadStage,
   type LeadTemperature,
   type Profile,
-  type Team,
 } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { LeadDetailSheet } from "./lead-detail-sheet"
@@ -89,23 +86,13 @@ export function LeadsBoard() {
   const [openAdd, setOpenAdd] = React.useState(false)
   const [activeLeadId, setActiveLeadId] = React.useState<string | null>(null)
   const [tempFilter, setTempFilter] = React.useState<LeadTemperature | "all">("all")
-  const [teamFilter, setTeamFilter] = React.useState<Team | "all">("all")
   const [search, setSearch] = React.useState("")
   const activeLead = leads.find((l) => l.id === activeLeadId) ?? null
-
-  // Team-of-owner lookup: profiles power the badge / filter, leads only
-  // store owner_id so we resolve through the profile list each render.
-  const teamForLead = React.useCallback(
-    (l: Lead): Team | null =>
-      profiles.find((p) => p.id === l.owner_id)?.team ?? null,
-    [profiles]
-  )
 
   const visibleLeads = React.useMemo(() => {
     const needle = search.trim().toLowerCase()
     return leads.filter((l) => {
       if (tempFilter !== "all" && l.temperature !== tempFilter) return false
-      if (teamFilter !== "all" && teamForLead(l) !== teamFilter) return false
       if (!needle) return true
       return (
         l.name.toLowerCase().includes(needle) ||
@@ -113,16 +100,7 @@ export function LeadsBoard() {
         (l.email ?? "").toLowerCase().includes(needle)
       )
     })
-  }, [leads, tempFilter, teamFilter, teamForLead, search])
-
-  const teamCounts = React.useMemo(() => {
-    const c: Record<Team, number> = { madrid: 0, us: 0 }
-    for (const l of leads) {
-      const t = teamForLead(l)
-      if (t) c[t] += 1
-    }
-    return c
-  }, [leads, teamForLead])
+  }, [leads, tempFilter, search])
 
   // Group + sort by position so the kanban order is stable
   const byStage = React.useMemo(() => {
@@ -215,9 +193,6 @@ export function LeadsBoard() {
           tempFilter={tempFilter}
           onTempFilter={setTempFilter}
           tempCounts={tempCounts}
-          teamFilter={teamFilter}
-          onTeamFilter={setTeamFilter}
-          teamCounts={teamCounts}
           totalLeads={leads.length}
         />
         {isInitialLoad && <LeadsBoardSkeleton />}
@@ -362,7 +337,7 @@ export function LeadsBoard() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// FilterBar — unified Search + Temperature + Team + Reset
+// FilterBar — Search + Temperature + Reset
 // ─────────────────────────────────────────────────────────────────────────
 
 function FilterBar({
@@ -371,9 +346,6 @@ function FilterBar({
   tempFilter,
   onTempFilter,
   tempCounts,
-  teamFilter,
-  onTeamFilter,
-  teamCounts,
   totalLeads,
 }: {
   search: string
@@ -381,13 +353,10 @@ function FilterBar({
   tempFilter: LeadTemperature | "all"
   onTempFilter: (v: LeadTemperature | "all") => void
   tempCounts: Record<LeadTemperature, number>
-  teamFilter: Team | "all"
-  onTeamFilter: (v: Team | "all") => void
-  teamCounts: Record<Team, number>
   totalLeads: number
 }) {
   const anyActive =
-    tempFilter !== "all" || teamFilter !== "all" || search.trim().length > 0
+    tempFilter !== "all" || search.trim().length > 0
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -424,29 +393,6 @@ function FilterBar({
         </SelectContent>
       </Select>
 
-      <Select
-        value={teamFilter}
-        onValueChange={(v) => onTeamFilter(v as Team | "all")}
-      >
-        <SelectTrigger size="sm" className="w-40">
-          <Users className="size-3.5 text-muted-foreground" />
-          <SelectValue placeholder="All teams" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">All teams · {totalLeads}</SelectItem>
-          {TEAMS.map((t) => (
-            <SelectItem key={t.id} value={t.id}>
-              <span className="inline-flex items-center gap-2">
-                <span className={cn("size-2 rounded-full", t.dot)} />
-                {t.label}
-                <span className="text-text-tertiary">·</span>
-                <span className="text-text-secondary">{teamCounts[t.id]}</span>
-              </span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
       {anyActive && (
         <Button
           variant="ghost"
@@ -454,7 +400,6 @@ function FilterBar({
           onClick={() => {
             onSearch("")
             onTempFilter("all")
-            onTeamFilter("all")
           }}
         >
           <RotateCcw />

@@ -41,9 +41,6 @@ export function useCurrentUser() {
         email: u.email ?? "",
         avatar_url: (u.user_metadata?.avatar_url as string | undefined) ?? null,
         role: "member",
-        // Default any auth-only user to the Madrid team. Once profiles are
-        // backfilled in the DB, the row above wins and this stays as fallback.
-        team: (u.user_metadata?.team as "madrid" | "us" | undefined) ?? "madrid",
         created_at: u.created_at,
       }
     },

@@ -24,7 +24,6 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs"
 import { EditableTaskRow } from "@/components/dashboard/editable-task-row"
 import { EmptyState } from "@/components/dashboard/empty-state"
-import { TeamBadge } from "@/components/dashboard/team-badge"
 import { useCreateNote, useNotesFor } from "@/hooks/use-notes"
 import { useCreateTask, useTasks } from "@/hooks/use-tasks"
 import { usePartners } from "@/hooks/use-partners"
@@ -171,10 +170,7 @@ function Inner({
               <SelectContent>
                 {profiles.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
-                    <span className="inline-flex items-center gap-1.5">
-                      {p.full_name}
-                      <TeamBadge team={p.team} />
-                    </span>
+                    {p.full_name}
                   </SelectItem>
                 ))}
               </SelectContent>

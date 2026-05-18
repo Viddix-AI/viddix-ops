@@ -13,18 +13,12 @@ export type TaskPriority = "low" | "medium" | "high" | "urgent"
 export type EventType = "call" | "meeting" | "deadline" | "internal"
 export type LeadTemperature = "hot" | "warm" | "cold"
 
-// Team membership. The Madrid team works on shared projects (Pablo Martin +
-// Pablo Capita); the US team handles US-based clients independently
-// (Pablo Sanz). Used for visual grouping + filters across the app.
-export type Team = "madrid" | "us"
-
 export type Profile = {
   id: string
   full_name: string
   email: string
   avatar_url: string | null
   role: string
-  team: Team
   created_at: string
 }
 
@@ -246,41 +240,3 @@ export const LEAD_TEMPERATURES: {
   { id: "cold", label: "Cold", pillTone: "sky",   dot: "bg-sky-500" },
 ]
 
-// Visual identity for each team.
-//   - `pillTone` feeds the Pill primitive (used by TeamBadge + filter chips).
-//   - `avatarTone` / `ringTone` colour the UserAvatar background + outer ring
-//     directly because Avatar isn't a Pill (different shape, different sizes).
-//     These stay as raw Tailwind class strings for now.
-export const TEAMS: {
-  id: Team
-  label: string
-  short: string
-  pillTone: DataTone
-  /** Solid colour class for the small dot used in filter chips. */
-  dot: string
-  avatarTone: string
-  ringTone: string
-}[] = [
-  {
-    id: "madrid",
-    label: "Madrid",
-    short: "MAD",
-    pillTone: "blue",
-    dot: "bg-blue-500",
-    avatarTone: "bg-blue-100 text-blue-700",
-    ringTone: "ring-blue-400",
-  },
-  {
-    id: "us",
-    label: "US",
-    short: "US",
-    pillTone: "emerald",
-    dot: "bg-emerald-500",
-    avatarTone: "bg-emerald-100 text-emerald-700",
-    ringTone: "ring-emerald-400",
-  },
-]
-
-export function teamFor(id: Team) {
-  return TEAMS.find((t) => t.id === id) ?? TEAMS[0]
-}

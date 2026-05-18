@@ -19,7 +19,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { TeamBadge } from "@/components/dashboard/team-badge"
 import { useCreateLead } from "@/hooks/use-leads"
 import { usePartners } from "@/hooks/use-partners"
 import { useProfiles } from "@/hooks/use-profile"
@@ -237,10 +236,7 @@ export function AddLeadSheet({
                   </SelectItem>
                   {profiles.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
-                      <span className="inline-flex items-center gap-1.5">
-                        {p.full_name}
-                        <TeamBadge team={p.team} />
-                      </span>
+                      {p.full_name}
                     </SelectItem>
                   ))}
                 </SelectContent>

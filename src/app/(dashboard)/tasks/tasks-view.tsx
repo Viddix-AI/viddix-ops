@@ -15,20 +15,13 @@ import { EmptyState } from "@/components/dashboard/empty-state"
 import { PageHeader } from "@/components/dashboard/page-header"
 import { PriorityBadge } from "@/components/dashboard/priority-badge"
 import { TaskStatusBadge } from "@/components/dashboard/status-badge"
-import { TeamBadge } from "@/components/dashboard/team-badge"
 import { useClients } from "@/hooks/use-clients"
 import { useLeads } from "@/hooks/use-leads"
 import { useProfiles } from "@/hooks/use-profile"
 import { useTasks, useUpdateTask } from "@/hooks/use-tasks"
 import { relativeDay } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import {
-  TEAMS,
-  type Profile,
-  type Task,
-  type TaskPriority,
-  type Team,
-} from "@/lib/types"
+import type { Profile, Task, TaskPriority } from "@/lib/types"
 import { TaskDetailSheet } from "./task-detail-sheet"
 
 const PRIORITIES: { value: TaskPriority; label: string }[] = [
@@ -56,7 +49,6 @@ export function TasksView() {
 
   const [filterAssignee, setFilterAssignee] = React.useState("")
   const [filterPriority, setFilterPriority] = React.useState<TaskPriority | "">("")
-  const [filterTeam, setFilterTeam] = React.useState<Team | "">("")
   const [activeTaskId, setActiveTaskId] = React.useState<string | null>(null)
 
   const { todayMs, weekEndMs } = React.useMemo(() => {
@@ -78,17 +70,9 @@ export function TasksView() {
   }
 
   // Filtering: assignee filter matches if the task contains the picked id.
-  // Team filter matches if ANY assignee belongs to the picked team — so a
-  // cross-team task still surfaces under either team filter.
   const filtered = tasks.filter((t) => {
     if (filterAssignee && !t.assignee_ids.includes(filterAssignee)) return false
     if (filterPriority && t.priority !== filterPriority) return false
-    if (filterTeam) {
-      const teams = t.assignee_ids
-        .map((id) => profiles.find((p) => p.id === id)?.team)
-        .filter(Boolean) as Team[]
-      if (!teams.includes(filterTeam)) return false
-    }
     return true
   })
 
@@ -128,26 +112,7 @@ export function TasksView() {
               <SelectItem value="">All assignees</SelectItem>
               {profiles.map((p) => (
                 <SelectItem key={p.id} value={p.id}>
-                  <span className="inline-flex items-center gap-1.5">
-                    {p.full_name}
-                    <TeamBadge team={p.team} />
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={filterTeam}
-            onValueChange={(v) => setFilterTeam((v ?? "") as Team | "")}
-          >
-            <SelectTrigger size="sm">
-              <SelectValue placeholder="All teams" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">All teams</SelectItem>
-              {TEAMS.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
-                  {t.label}
+                  {p.full_name}
                 </SelectItem>
               ))}
             </SelectContent>
