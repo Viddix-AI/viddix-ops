@@ -56,6 +56,11 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: "bad-json" }, { status: 400 })
   }
 
+  console.log("cal webhook received", {
+    triggerEvent: body.triggerEvent,
+    payload: body.payload,
+  })
+
   const supabase = createClient(url, serviceKey, {
     auth: { persistSession: false },
   })
