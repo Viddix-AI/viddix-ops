@@ -160,6 +160,9 @@ export type Event = {
   // Set when an event originated from a Cal.com booking. Used by the webhook
   // handler as an idempotency key so retries don't insert duplicates.
   cal_booking_id: string | null
+  // Paired tasks row for meeting/call events. Auto-created by the data-store
+  // and webhook handler; ON DELETE SET NULL means a task delete just detaches.
+  task_id: string | null
   created_at: string
 }
 

@@ -504,6 +504,7 @@ const localStore = {
       lead_id: input.lead_id ?? null,
       attendees: input.attendees ?? [],
       cal_booking_id: input.cal_booking_id ?? null,
+      task_id: null,
       created_at: now(),
     }
     db.events.push(e)
