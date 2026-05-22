@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { CheckSquare, ExternalLink } from "lucide-react"
+import { CheckSquare, Clock, ExternalLink } from "lucide-react"
 
 import {
   Select,
@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/dashboard/page-header"
 import { PriorityBadge } from "@/components/dashboard/priority-badge"
 import { TaskStatusBadge } from "@/components/dashboard/status-badge"
 import { useClients } from "@/hooks/use-clients"
+import { useEvents } from "@/hooks/use-events"
 import { useLeads } from "@/hooks/use-leads"
 import { useProfiles } from "@/hooks/use-profile"
 import { useTasks, useUpdateTask } from "@/hooks/use-tasks"
@@ -45,7 +46,13 @@ export function TasksView() {
   const { data: profiles = [] } = useProfiles()
   const { data: leads = [] } = useLeads()
   const { data: clients = [] } = useClients()
+  const { data: events = [] } = useEvents()
   const update = useUpdateTask()
+
+  const pairedTaskIds = React.useMemo(
+    () => new Set(events.filter((e) => e.task_id).map((e) => e.task_id!)),
+    [events]
+  )
 
   const [filterAssignee, setFilterAssignee] = React.useState("")
   const [filterPriority, setFilterPriority] = React.useState<TaskPriority | "">("")
@@ -180,6 +187,9 @@ export function TasksView() {
                               "text-text-tertiary line-through"
                           )}
                         >
+                          {pairedTaskIds.has(task.id) && (
+                            <Clock className="mr-1 inline size-3 align-text-bottom text-muted-foreground" aria-label="From the calendar" />
+                          )}
                           {task.title}
                         </p>
                         {(linkedLead || linkedClient) && (
