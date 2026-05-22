@@ -7,6 +7,7 @@
 
 import { createClient } from "@/lib/supabase/client"
 import type { Backend } from "@/lib/backend"
+import { buildTaskFromEvent, EventBlockedByCalCom } from "@/lib/data-store"
 import type {
   Activity,
   Client,
@@ -69,6 +70,71 @@ function logActivity(a: Omit<Activity, "id" | "created_at" | "actor_id"> & { act
       window.dispatchEvent(new CustomEvent("viddix:store-changed"))
     }
   })()
+}
+
+// Materialise a Client (and optional client_partners row) for a lead that is
+// transitioning to stage="won". Idempotent: if the lead already has a
+// `converted_client_id` pointing to an existing client, returns that client
+// without inserting anything. Does NOT touch the leads row — the caller
+// updates `converted_client_id` (and any other lead fields) as part of its
+// own update so the operation stays a single round-trip per code path.
+async function ensureClientForWonLead(lead: Lead): Promise<Client> {
+  if (lead.converted_client_id) {
+    const existing = await db()
+      .from("clients")
+      .select("*")
+      .eq("id", lead.converted_client_id)
+      .maybeSingle()
+    if (existing.data) return existing.data as Client
+  }
+  const r = await db()
+    .from("clients")
+    .insert({
+      name: lead.company ?? lead.name,
+      contact_name: lead.name,
+      contact_email: lead.email,
+      contact_phone: lead.phone,
+      mrr: lead.value,
+      industry: null,
+      website: lead.website,
+      notes: lead.notes,
+      started_at: new Date().toISOString().slice(0, 10),
+      owner_id: lead.owner_id,
+    })
+    .select()
+    .single()
+  const client = unwrap(r, "ensureClientForWonLead") as Client
+  if (lead.partner_id) {
+    await db()
+      .from("client_partners")
+      .upsert(
+        {
+          client_id: client.id,
+          partner_id: lead.partner_id,
+          split_pct: lead.partner_split_pct ?? 0,
+        },
+        { onConflict: "client_id,partner_id" }
+      )
+    logActivity({
+      kind: "partner_attached",
+      message: `Partner attached to ${client.name}`,
+      lead_id: lead.id,
+      client_id: client.id,
+      partner_id: lead.partner_id,
+      task_id: null,
+      actor_id: null,
+    })
+  }
+  logActivity({
+    kind: "lead_converted",
+    message: `${lead.name} converted to client`,
+    lead_id: lead.id,
+    client_id: client.id,
+    partner_id: null,
+    task_id: null,
+    actor_id: null,
+  })
+  return client
 }
 
 export const supabaseBackend: Backend = {
@@ -194,17 +260,45 @@ export const supabaseBackend: Backend = {
       task_id: null,
       actor_id: null,
     })
+    if (lead.stage === "won" && !lead.converted_client_id) {
+      const client = await ensureClientForWonLead(lead)
+      await db()
+        .from("leads")
+        .update({ converted_client_id: client.id })
+        .eq("id", lead.id)
+      return { ...lead, converted_client_id: client.id }
+    }
     return lead
   },
   async updateLead(id, patch) {
-    const r = await db().from("leads").update(patch).eq("id", id).select().single()
+    let effectivePatch = patch
+    if (patch.stage !== undefined) {
+      const lead = (await this.lead(id)) as Lead | null
+      if (!lead) throw new Error(`Supabase: updateLead — lead ${id} not found`)
+      if (lead.converted_client_id && patch.stage !== "won") {
+        throw new Error("Cannot change stage of a converted lead")
+      }
+      if (patch.stage === "won" && !lead.converted_client_id) {
+        const client = await ensureClientForWonLead(lead)
+        effectivePatch = { ...patch, converted_client_id: client.id }
+      }
+    }
+    const r = await db().from("leads").update(effectivePatch).eq("id", id).select().single()
     if (r.error) throw new Error(`Supabase: updateLead — ${r.error.message}`)
     return r.data as Lead
   },
   async moveLead(id, toStage, toIndex) {
-    // Two-step: update target row, then renormalize positions inside the
-    // destination stage. Source stage will renormalise on its next move.
-    const u = await db().from("leads").update({ stage: toStage, position: toIndex }).eq("id", id)
+    const lead = (await this.lead(id)) as Lead | null
+    if (!lead) throw new Error(`Supabase: moveLead — lead ${id} not found`)
+    if (lead.converted_client_id && toStage !== "won") {
+      throw new Error("Cannot move a converted lead out of won")
+    }
+    const update: Partial<Lead> = { stage: toStage, position: toIndex }
+    if (toStage === "won" && !lead.converted_client_id) {
+      const client = await ensureClientForWonLead(lead)
+      update.converted_client_id = client.id
+    }
+    const u = await db().from("leads").update(update).eq("id", id)
     if (u.error) throw new Error(`Supabase: moveLead — ${u.error.message}`)
     logActivity({
       kind: "lead_moved",
@@ -232,63 +326,13 @@ export const supabaseBackend: Backend = {
   async convertLeadToClient(id) {
     const lead = (await this.lead(id)) as Lead | null
     if (!lead) return null
-    if (lead.converted_client_id) {
-      const existing = await this.client(lead.converted_client_id)
-      if (existing) return existing
-    }
-    const r = await db()
-      .from("clients")
-      .insert({
-        name: lead.company ?? lead.name,
-        contact_name: lead.name,
-        contact_email: lead.email,
-        contact_phone: lead.phone,
-        mrr: lead.value,
-        industry: null,
-        website: lead.website,
-        notes: lead.notes,
-        started_at: new Date().toISOString().slice(0, 10),
-        owner_id: lead.owner_id,
-      })
-      .select()
-      .single()
-    const client = unwrap(r, "convertLeadToClient") as Client
-    await db()
-      .from("leads")
-      .update({ stage: "won", converted_client_id: client.id })
-      .eq("id", lead.id)
-    // Materialise the lead's pre-allocated partner as a client_partners row
-    // so the split survives conversion.
-    if (lead.partner_id) {
+    const client = await ensureClientForWonLead(lead)
+    if (lead.stage !== "won" || lead.converted_client_id !== client.id) {
       await db()
-        .from("client_partners")
-        .upsert(
-          {
-            client_id: client.id,
-            partner_id: lead.partner_id,
-            split_pct: lead.partner_split_pct ?? 0,
-          },
-          { onConflict: "client_id,partner_id" }
-        )
-      logActivity({
-        kind: "partner_attached",
-        message: `Partner attached to ${client.name}`,
-        lead_id: lead.id,
-        client_id: client.id,
-        partner_id: lead.partner_id,
-        task_id: null,
-        actor_id: null,
-      })
+        .from("leads")
+        .update({ stage: "won", converted_client_id: client.id })
+        .eq("id", lead.id)
     }
-    logActivity({
-      kind: "lead_converted",
-      message: `${lead.name} converted to client`,
-      lead_id: lead.id,
-      client_id: client.id,
-      partner_id: null,
-      task_id: null,
-      actor_id: null,
-    })
     return client
   },
 
@@ -369,14 +413,45 @@ export const supabaseBackend: Backend = {
     return r.data as Task
   },
   async deleteTask(id) {
+    // events.task_id has ON DELETE SET NULL (migration 014), so any paired
+    // event survives with task_id cleared automatically.
     const r = await db().from("tasks").delete().eq("id", id)
     if (r.error) throw new Error(`Supabase: deleteTask — ${r.error.message}`)
   },
 
   // ── events ───────────────────────────────────────────────────────────────
   async createEvent(input) {
-    // Upsert by cal_booking_id (idempotency key for Cal.com webhook retries).
-    // Internal events leave it null and always insert.
+    const wantsTask =
+      (input.event_type ?? "meeting") === "meeting" ||
+      input.event_type === "call"
+    let task_id: string | null = null
+    if (wantsTask) {
+      const taskPayload = buildTaskFromEvent({
+        title: input.title,
+        start_at: input.start_at,
+        event_type: input.event_type ?? "meeting",
+        client_id: input.client_id ?? null,
+        lead_id: input.lead_id ?? null,
+      })
+      const tr = await db()
+        .from("tasks")
+        .insert({
+          title: taskPayload.title,
+          description: null,
+          due_date: taskPayload.due_date,
+          due_time: taskPayload.due_time,
+          priority: taskPayload.priority,
+          status: taskPayload.status,
+          assignee_ids: [],
+          link: null,
+          client_id: taskPayload.client_id,
+          lead_id: taskPayload.lead_id,
+        })
+        .select("id")
+        .single()
+      if (tr.error) throw new Error(`Supabase: createEvent.task — ${tr.error.message}`)
+      task_id = tr.data.id as string
+    }
     const payload = {
       title: input.title,
       description: input.description ?? null,
@@ -387,6 +462,7 @@ export const supabaseBackend: Backend = {
       lead_id: input.lead_id ?? null,
       attendees: input.attendees ?? [],
       cal_booking_id: input.cal_booking_id ?? null,
+      task_id,
     }
     const r = input.cal_booking_id
       ? await db()
@@ -395,6 +471,10 @@ export const supabaseBackend: Backend = {
           .select()
           .single()
       : await db().from("events").insert(payload).select().single()
+    if (r.error && task_id) {
+      // Best-effort cleanup of the orphan task if the event insert failed.
+      await db().from("tasks").delete().eq("id", task_id)
+    }
     const event = unwrap(r, "createEvent") as Event
     logActivity({
       kind: "event_created",
@@ -410,6 +490,24 @@ export const supabaseBackend: Backend = {
     const r = await db().from("events").update(patch).eq("id", id).select().single()
     if (r.error) throw new Error(`Supabase: updateEvent — ${r.error.message}`)
     const event = r.data as Event
+    if (
+      event.task_id &&
+      (patch.title !== undefined || patch.start_at !== undefined)
+    ) {
+      const mirror = buildTaskFromEvent(event)
+      const tu = await db()
+        .from("tasks")
+        .update({
+          title: mirror.title,
+          due_date: mirror.due_date,
+          due_time: mirror.due_time,
+        })
+        .eq("id", event.task_id)
+      if (tu.error) {
+        // Non-fatal — log and continue. The event update already succeeded.
+        console.warn(`updateEvent.mirror failed: ${tu.error.message}`)
+      }
+    }
     logActivity({
       kind: "event_updated",
       message: `Event updated — ${event.title}`,
@@ -421,8 +519,25 @@ export const supabaseBackend: Backend = {
     return event
   },
   async deleteEvent(id) {
+    // Load the row first to decide guard/cascade behavior.
+    const lookup = await db()
+      .from("events")
+      .select("cal_booking_id, task_id")
+      .eq("id", id)
+      .maybeSingle()
+    if (lookup.error) throw new Error(`Supabase: deleteEvent.lookup — ${lookup.error.message}`)
+    if (!lookup.data) return
+    if (lookup.data.cal_booking_id) {
+      throw new EventBlockedByCalCom(lookup.data.cal_booking_id)
+    }
     const r = await db().from("events").delete().eq("id", id)
     if (r.error) throw new Error(`Supabase: deleteEvent — ${r.error.message}`)
+    if (lookup.data.task_id) {
+      const tr = await db().from("tasks").delete().eq("id", lookup.data.task_id)
+      if (tr.error) {
+        console.warn(`deleteEvent.task cascade failed: ${tr.error.message}`)
+      }
+    }
   },
 
   // ── profiles ─────────────────────────────────────────────────────────────

@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/sheet"
 import { AssigneeMultiSelect } from "@/components/dashboard/assignee-multi-select"
 import { useClients } from "@/hooks/use-clients"
+import { useEvents } from "@/hooks/use-events"
 import { useLeads } from "@/hooks/use-leads"
 import { useProfiles } from "@/hooks/use-profile"
 import { useDeleteTask, useUpdateTask } from "@/hooks/use-tasks"
@@ -56,6 +57,8 @@ export function TaskDetailSheet({
   const { data: profiles = [] } = useProfiles()
   const { data: leads = [] } = useLeads()
   const { data: clients = [] } = useClients()
+  const { data: events = [] } = useEvents()
+  const pairedEvent = task ? events.find((e) => e.task_id === task.id) ?? null : null
   const update = useUpdateTask()
   const remove = useDeleteTask()
 
@@ -80,6 +83,30 @@ export function TaskDetailSheet({
         <SheetHeader>
           <SheetTitle>Task</SheetTitle>
         </SheetHeader>
+        {pairedEvent && (
+          <div className="mx-4 mt-2 flex items-center gap-2 rounded-md bg-primary/10 px-3 py-2 text-xs">
+            <span className="font-semibold text-primary">Event</span>
+            <span className="text-muted-foreground">
+              {new Date(pairedEvent.start_at).toLocaleString("en-US", {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+              {pairedEvent.end_at &&
+                ` – ${new Date(pairedEvent.end_at).toLocaleTimeString("en-US", {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}`}
+            </span>
+            {pairedEvent.cal_booking_id && (
+              <span className="ml-auto rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                From Cal.com
+              </span>
+            )}
+          </div>
+        )}
         <div className="flex-1 space-y-4 overflow-y-auto px-4 pb-4">
           <Field label="Title">
             <Input
@@ -106,9 +133,15 @@ export function TaskDetailSheet({
 
           <div className="grid grid-cols-3 gap-3">
             <Field label="Due date">
+              {pairedEvent && (
+                <p className="text-[10px] text-muted-foreground">
+                  Controlled by the calendar event.
+                </p>
+              )}
               <Input
                 type="date"
                 defaultValue={task.due_date ?? ""}
+                disabled={pairedEvent !== null}
                 onBlur={(e) => {
                   const v = e.target.value
                   if (v !== (task.due_date ?? "")) {
@@ -120,10 +153,15 @@ export function TaskDetailSheet({
               />
             </Field>
             <Field label="Due time">
+              {pairedEvent && (
+                <p className="text-[10px] text-muted-foreground">
+                  Controlled by the calendar event.
+                </p>
+              )}
               <Input
                 type="time"
                 defaultValue={task.due_time ?? ""}
-                disabled={!task.due_date}
+                disabled={pairedEvent !== null || !task.due_date}
                 onBlur={(e) => {
                   const v = e.target.value
                   if (v !== (task.due_time ?? "")) {
@@ -258,23 +296,35 @@ export function TaskDetailSheet({
           </Field>
 
           <div className="pt-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive"
-              onClick={() => {
-                if (!confirm("Delete this task? This cannot be undone.")) return
-                remove.mutate(task.id, {
-                  onSuccess: () => {
-                    toast.success("Task deleted")
-                    onOpenChange(false)
-                  },
-                })
-              }}
-            >
-              <Trash2 />
-              Delete task
-            </Button>
+            {pairedEvent?.cal_booking_id ? (
+              <a
+                href={`https://app.cal.com/booking/${pairedEvent.cal_booking_id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-md bg-rose-500/10 px-2.5 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-500/20 dark:text-rose-300"
+              >
+                <ExternalLink className="size-3" />
+                Cancel in Cal.com
+              </a>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => {
+                  if (!confirm("Delete this task? This cannot be undone.")) return
+                  remove.mutate(task.id, {
+                    onSuccess: () => {
+                      toast.success("Task deleted")
+                      onOpenChange(false)
+                    },
+                  })
+                }}
+              >
+                <Trash2 />
+                Delete task
+              </Button>
+            )}
           </div>
         </div>
       </SheetContent>

@@ -22,9 +22,11 @@ import { useLeads } from "@/hooks/use-leads"
 import { useTasks, useUpdateTask } from "@/hooks/use-tasks"
 import { downloadFile } from "@/lib/csv"
 import { buildIcs, googleCalendarUrl, type IcsItem } from "@/lib/ics"
+import { isoDay } from "@/lib/time-grid-math"
 import { cn } from "@/lib/utils"
 import { AddEventDialog } from "./add-event-dialog"
 import { TimeGrid } from "./time-grid"
+import { TaskDetailSheet } from "../tasks/task-detail-sheet"
 
 // ─────────────────────────────────────────────────────────────────────────
 // Shared bucketing — events + tasks grouped by ISO day key
@@ -41,6 +43,7 @@ type Item =
       tone: string
       href: string | null
       gcalUrl: string
+      task_id: string | null
     }
   | {
       kind: "task"
@@ -79,9 +82,6 @@ function addDays(d: Date, n: number) {
   x.setDate(x.getDate() + n)
   return x
 }
-function isoDay(d: Date) {
-  return d.toISOString().slice(0, 10)
-}
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
@@ -104,6 +104,7 @@ export function CalendarView() {
   const [addOpen, setAddOpen] = React.useState(false)
   const [addDate, setAddDate] = React.useState<string | null>(null)
   const [addTime, setAddTime] = React.useState<string | null>(null)
+  const [selectedTaskId, setSelectedTaskId] = React.useState<string | null>(null)
   const today = React.useMemo(() => startOfDay(new Date()), [])
 
   function openCreate(date?: string, time?: string) {
@@ -113,7 +114,13 @@ export function CalendarView() {
   }
 
   // Bucket all events + tasks by ISO day key — used by every view + the
-  // sidebar's today panel.
+  // sidebar's today panel. Tasks paired with an event are skipped here: the
+  // event already represents the meeting on the calendar; the shadow task
+  // only exists to surface the meeting in /tasks.
+  const pairedTaskIds = React.useMemo(
+    () => new Set(events.map((e) => e.task_id).filter((id): id is string => !!id)),
+    [events]
+  )
   const buckets = React.useMemo(() => {
     const map = new Map<string, Item[]>()
     const push = (k: string, item: Item) => {
@@ -144,10 +151,12 @@ export function CalendarView() {
           endISO: e.end_at,
           description: e.description,
         }),
+        task_id: e.task_id,
       })
     }
     for (const t of tasks) {
       if (!t.due_date) continue
+      if (pairedTaskIds.has(t.id)) continue
       const client = clients.find((c) => c.id === t.client_id)
       const lead = leads.find((l) => l.id === t.lead_id)
       push(t.due_date, {
@@ -170,7 +179,7 @@ export function CalendarView() {
       })
     }
     return map
-  }, [events, tasks, clients, leads])
+  }, [events, tasks, clients, leads, pairedTaskIds])
 
   // ── Header navigation per view ──────────────────────────────────────────
   function navPrev() {
@@ -335,6 +344,7 @@ export function CalendarView() {
                 today={today}
                 buckets={buckets}
                 onCreateAt={openCreate}
+                onOpenTask={setSelectedTaskId}
               />
             )}
             {view === "week" && (
@@ -351,6 +361,13 @@ export function CalendarView() {
                 onUpdateTask={(id, patch) =>
                   updateTask.mutate({ id, patch })
                 }
+                onSelectItem={(it) => {
+                  if (it.kind === "event" && it.event.task_id) {
+                    setSelectedTaskId(it.event.task_id)
+                  } else if (it.kind === "task") {
+                    setSelectedTaskId(it.task.id)
+                  }
+                }}
               />
             )}
             {view === "day" && (
@@ -365,6 +382,13 @@ export function CalendarView() {
                 onUpdateTask={(id, patch) =>
                   updateTask.mutate({ id, patch })
                 }
+                onSelectItem={(it) => {
+                  if (it.kind === "event" && it.event.task_id) {
+                    setSelectedTaskId(it.event.task_id)
+                  } else if (it.kind === "task") {
+                    setSelectedTaskId(it.task.id)
+                  }
+                }}
               />
             )}
             {view === "agenda" && (
@@ -372,6 +396,7 @@ export function CalendarView() {
                 today={today}
                 buckets={buckets}
                 onCreateAt={openCreate}
+                onOpenTask={setSelectedTaskId}
               />
             )}
           </div>
@@ -405,6 +430,7 @@ export function CalendarView() {
                 <TodayAgenda
                   items={buckets.get(isoDay(today)) ?? []}
                   onAdd={() => openCreate(isoDay(today))}
+                  onOpenTask={setSelectedTaskId}
                 />
               </CardContent>
             </Card>
@@ -417,6 +443,11 @@ export function CalendarView() {
         onOpenChange={setAddOpen}
         defaultDate={addDate}
         defaultTime={addTime}
+      />
+      <TaskDetailSheet
+        task={tasks.find((t) => t.id === selectedTaskId) ?? null}
+        open={selectedTaskId !== null}
+        onOpenChange={(o) => { if (!o) setSelectedTaskId(null) }}
       />
     </>
   )
@@ -478,11 +509,13 @@ function MonthView({
   today,
   buckets,
   onCreateAt,
+  onOpenTask,
 }: {
   cursor: Date
   today: Date
   buckets: Map<string, Item[]>
   onCreateAt: (date: string) => void
+  onOpenTask: (taskId: string) => void
 }) {
   const gridStart = React.useMemo(
     () => startOfWeekMonday(startOfMonth(cursor)),
@@ -545,7 +578,7 @@ function MonthView({
               </div>
               <ul className="space-y-1">
                 {items.slice(0, 3).map((it) => (
-                  <ItemRow key={`${it.kind}-${it.id}`} item={it} compact />
+                  <ItemRow key={`${it.kind}-${it.id}`} item={it} compact onOpenTask={onOpenTask} />
                 ))}
               </ul>
             </div>
@@ -564,10 +597,12 @@ function AgendaView({
   today,
   buckets,
   onCreateAt,
+  onOpenTask,
 }: {
   today: Date
   buckets: Map<string, Item[]>
   onCreateAt: (date: string) => void
+  onOpenTask: (taskId: string) => void
 }) {
   // Walk 30 days forward, keep only days that have any items.
   const groups = React.useMemo(() => {
@@ -629,7 +664,7 @@ function AgendaView({
             </div>
             <ul className="space-y-1.5 rounded-xl bg-card p-2 ring-1 ring-border">
               {g.items.map((it) => (
-                <ItemRow key={`${it.kind}-${it.id}`} item={it} expanded />
+                <ItemRow key={`${it.kind}-${it.id}`} item={it} expanded onOpenTask={onOpenTask} />
               ))}
             </ul>
           </section>
@@ -646,9 +681,11 @@ function AgendaView({
 function TodayAgenda({
   items,
   onAdd,
+  onOpenTask,
 }: {
   items: Item[]
   onAdd: () => void
+  onOpenTask: (taskId: string) => void
 }) {
   if (items.length === 0) {
     return (
@@ -668,7 +705,7 @@ function TodayAgenda({
   return (
     <ul className="space-y-1.5">
       {items.map((it) => (
-        <ItemRow key={`${it.kind}-${it.id}`} item={it} expanded />
+        <ItemRow key={`${it.kind}-${it.id}`} item={it} expanded onOpenTask={onOpenTask} />
       ))}
     </ul>
   )
@@ -682,12 +719,14 @@ function ItemRow({
   item,
   compact,
   expanded,
+  onOpenTask,
 }: {
   item: Item
   /** Tight, single-line layout for the month grid cells. */
   compact?: boolean
   /** Two-line layout with bigger title — week/day/agenda views. */
   expanded?: boolean
+  onOpenTask: (taskId: string) => void
 }) {
   const inner = (
     <div
@@ -738,7 +777,15 @@ function ItemRow({
   )
   return (
     <li>
-      {item.href ? (
+      {item.kind === "event" && item.task_id ? (
+        <button
+          type="button"
+          className="block w-full text-left"
+          onClick={() => onOpenTask(item.task_id!)}
+        >
+          {inner}
+        </button>
+      ) : item.href ? (
         <Link href={item.href} className="block">
           {inner}
         </Link>
