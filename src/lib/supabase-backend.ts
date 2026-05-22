@@ -7,6 +7,7 @@
 
 import { createClient } from "@/lib/supabase/client"
 import type { Backend } from "@/lib/backend"
+import { buildTaskFromEvent, EventBlockedByCalCom } from "@/lib/data-store"
 import type {
   Activity,
   Client,
@@ -412,14 +413,45 @@ export const supabaseBackend: Backend = {
     return r.data as Task
   },
   async deleteTask(id) {
+    // events.task_id has ON DELETE SET NULL (migration 014), so any paired
+    // event survives with task_id cleared automatically.
     const r = await db().from("tasks").delete().eq("id", id)
     if (r.error) throw new Error(`Supabase: deleteTask — ${r.error.message}`)
   },
 
   // ── events ───────────────────────────────────────────────────────────────
   async createEvent(input) {
-    // Upsert by cal_booking_id (idempotency key for Cal.com webhook retries).
-    // Internal events leave it null and always insert.
+    const wantsTask =
+      (input.event_type ?? "meeting") === "meeting" ||
+      input.event_type === "call"
+    let task_id: string | null = null
+    if (wantsTask) {
+      const taskPayload = buildTaskFromEvent({
+        title: input.title,
+        start_at: input.start_at,
+        event_type: input.event_type ?? "meeting",
+        client_id: input.client_id ?? null,
+        lead_id: input.lead_id ?? null,
+      })
+      const tr = await db()
+        .from("tasks")
+        .insert({
+          title: taskPayload.title,
+          description: null,
+          due_date: taskPayload.due_date,
+          due_time: taskPayload.due_time,
+          priority: taskPayload.priority,
+          status: taskPayload.status,
+          assignee_ids: [],
+          link: null,
+          client_id: taskPayload.client_id,
+          lead_id: taskPayload.lead_id,
+        })
+        .select("id")
+        .single()
+      if (tr.error) throw new Error(`Supabase: createEvent.task — ${tr.error.message}`)
+      task_id = tr.data.id as string
+    }
     const payload = {
       title: input.title,
       description: input.description ?? null,
@@ -430,7 +462,7 @@ export const supabaseBackend: Backend = {
       lead_id: input.lead_id ?? null,
       attendees: input.attendees ?? [],
       cal_booking_id: input.cal_booking_id ?? null,
-      task_id: input.task_id ?? null,
+      task_id,
     }
     const r = input.cal_booking_id
       ? await db()
@@ -439,6 +471,10 @@ export const supabaseBackend: Backend = {
           .select()
           .single()
       : await db().from("events").insert(payload).select().single()
+    if (r.error && task_id) {
+      // Best-effort cleanup of the orphan task if the event insert failed.
+      await db().from("tasks").delete().eq("id", task_id)
+    }
     const event = unwrap(r, "createEvent") as Event
     logActivity({
       kind: "event_created",
@@ -454,6 +490,24 @@ export const supabaseBackend: Backend = {
     const r = await db().from("events").update(patch).eq("id", id).select().single()
     if (r.error) throw new Error(`Supabase: updateEvent — ${r.error.message}`)
     const event = r.data as Event
+    if (
+      event.task_id &&
+      (patch.title !== undefined || patch.start_at !== undefined)
+    ) {
+      const mirror = buildTaskFromEvent(event)
+      const tu = await db()
+        .from("tasks")
+        .update({
+          title: mirror.title,
+          due_date: mirror.due_date,
+          due_time: mirror.due_time,
+        })
+        .eq("id", event.task_id)
+      if (tu.error) {
+        // Non-fatal — log and continue. The event update already succeeded.
+        console.warn(`updateEvent.mirror failed: ${tu.error.message}`)
+      }
+    }
     logActivity({
       kind: "event_updated",
       message: `Event updated — ${event.title}`,
@@ -465,8 +519,25 @@ export const supabaseBackend: Backend = {
     return event
   },
   async deleteEvent(id) {
+    // Load the row first to decide guard/cascade behavior.
+    const lookup = await db()
+      .from("events")
+      .select("cal_booking_id, task_id")
+      .eq("id", id)
+      .maybeSingle()
+    if (lookup.error) throw new Error(`Supabase: deleteEvent.lookup — ${lookup.error.message}`)
+    if (!lookup.data) return
+    if (lookup.data.cal_booking_id) {
+      throw new EventBlockedByCalCom(lookup.data.cal_booking_id)
+    }
     const r = await db().from("events").delete().eq("id", id)
     if (r.error) throw new Error(`Supabase: deleteEvent — ${r.error.message}`)
+    if (lookup.data.task_id) {
+      const tr = await db().from("tasks").delete().eq("id", lookup.data.task_id)
+      if (tr.error) {
+        console.warn(`deleteEvent.task cascade failed: ${tr.error.message}`)
+      }
+    }
   },
 
   // ── profiles ─────────────────────────────────────────────────────────────
