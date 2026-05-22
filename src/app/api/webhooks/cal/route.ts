@@ -19,6 +19,9 @@ import { buildTaskFromEvent } from "@/lib/data-store"
 export const runtime = "nodejs"
 
 // ── Cal.com payload shape (the subset we use) ────────────────────────────
+// Cal.com puts the *previous* booking uid under one of several names depending
+// on platform version. We try them all so a future rename doesn't silently
+// break reschedule handling.
 type CalPayload = {
   triggerEvent: "BOOKING_CREATED" | "BOOKING_RESCHEDULED" | "BOOKING_CANCELLED"
   payload: {
@@ -28,6 +31,10 @@ type CalPayload = {
     endTime: string
     organizer?: { email?: string | null } | null
     attendees?: Array<{ email?: string | null }> | null
+    // Reschedule-only — one of these holds the prior booking uid.
+    rescheduleUid?: string | null
+    rescheduleId?: string | null
+    fromReschedule?: string | null
   }
 }
 
@@ -57,6 +64,18 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: "bad-json" }, { status: 400 })
   }
 
+  // Temporary diagnostic — captures the full reschedule payload shape so we
+  // can confirm which field holds the previous booking uid in this Cal.com
+  // version. Remove once reschedule is verified working end-to-end.
+  console.log("cal webhook", {
+    triggerEvent: body.triggerEvent,
+    uid: body.payload?.uid,
+    rescheduleUid: body.payload?.rescheduleUid,
+    rescheduleId: body.payload?.rescheduleId,
+    fromReschedule: body.payload?.fromReschedule,
+    payloadKeys: Object.keys(body.payload ?? {}),
+  })
+
   const supabase = createClient(url, serviceKey, {
     auth: { persistSession: false },
   })
@@ -64,9 +83,21 @@ export async function POST(req: Request) {
   try {
     switch (body.triggerEvent) {
       case "BOOKING_CREATED":
-      case "BOOKING_RESCHEDULED":
-        await upsertBooking(supabase, body.payload)
+        await upsertBooking(supabase, body.payload, null)
         break
+      case "BOOKING_RESCHEDULED": {
+        // Cal.com keeps the old row alive on reschedule — it just fires this
+        // event with a NEW uid. We have to point our row at the new uid so
+        // the next webhook still matches; if we just upsert by the new uid
+        // we'd duplicate. Carry the paired task_id across.
+        const previousUid =
+          body.payload.rescheduleUid ??
+          body.payload.rescheduleId ??
+          body.payload.fromReschedule ??
+          null
+        await upsertBooking(supabase, body.payload, previousUid)
+        break
+      }
       case "BOOKING_CANCELLED":
         await cancelBooking(supabase, body.payload.uid)
         break
@@ -85,7 +116,11 @@ export async function POST(req: Request) {
 
 // ── Handlers ─────────────────────────────────────────────────────────────
 
-async function upsertBooking(supabase: SupabaseClient, p: CalPayload["payload"]) {
+async function upsertBooking(
+  supabase: SupabaseClient,
+  p: CalPayload["payload"],
+  previousUid: string | null
+) {
   const inviteeEmail = p.attendees?.[0]?.email ?? null
   const ownerEmail = p.organizer?.email ?? null
 
@@ -93,6 +128,37 @@ async function upsertBooking(supabase: SupabaseClient, p: CalPayload["payload"])
   const { leadId, clientId } = inviteeEmail
     ? await leadOrClientByEmail(supabase, inviteeEmail)
     : { leadId: null, clientId: null }
+
+  // Reschedule path: rewrite the existing row's cal_booking_id (and times)
+  // in place so we keep the same row and task_id. If the previous row isn't
+  // found (e.g. older booking pre-dating the integration), fall through to
+  // the normal upsert which will insert a new row.
+  if (previousUid) {
+    const { data: prev } = await supabase
+      .from("events")
+      .select("id")
+      .eq("cal_booking_id", previousUid)
+      .maybeSingle()
+    if (prev) {
+      const { data: event, error } = await supabase
+        .from("events")
+        .update({
+          title: p.title ?? "Cal.com booking",
+          start_at: p.startTime,
+          end_at: p.endTime,
+          client_id: clientId,
+          lead_id: leadId,
+          attendees: ownerId ? [ownerId] : [],
+          cal_booking_id: p.uid,
+        })
+        .eq("id", prev.id)
+        .select("id, title, start_at, event_type, client_id, lead_id, task_id")
+        .single()
+      if (error || !event) throw new Error(`reschedule events: ${error?.message ?? "no row"}`)
+      await ensurePairedTask(supabase, event)
+      return
+    }
+  }
 
   const row = {
     title: p.title ?? "Cal.com booking",
