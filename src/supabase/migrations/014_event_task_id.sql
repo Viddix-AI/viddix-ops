@@ -24,6 +24,9 @@ begin
     from public.events
     where event_type in ('meeting', 'call') and task_id is null
   loop
+    -- start_at is stored as UTC. AT TIME ZONE 'Europe/Madrid' converts to
+    -- local wall-clock for this team — fine for a one-off backfill. The
+    -- runtime uses JS local time via Date.getFullYear/etc.
     insert into public.tasks (
       title, due_date, due_time, status, priority, client_id, lead_id
     )
