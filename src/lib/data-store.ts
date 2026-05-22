@@ -509,7 +509,12 @@ const localStore = {
   deleteTask(id: string) {
     const db = read()
     const t = db.tasks.find((x) => x.id === id)
-    db.tasks = db.tasks.filter((t) => t.id !== id)
+    // Detach any paired event so it survives with a null task_id. The event
+    // row remains because Cal-origin events MUST survive task deletion.
+    db.events = db.events.map((e) =>
+      e.task_id === id ? { ...e, task_id: null } : e
+    )
+    db.tasks = db.tasks.filter((x) => x.id !== id)
     if (t) {
       record(db, "task_deleted", `Task deleted — ${t.title}`, {
         task_id: t.id,
@@ -540,9 +545,51 @@ const localStore = {
           lead_id: input.lead_id ?? existing.lead_id,
           attendees: input.attendees ?? existing.attendees,
         })
+        // Auto-pair if a meeting/call upsert came back without a task.
+        if (
+          !existing.task_id &&
+          (existing.event_type === "meeting" || existing.event_type === "call")
+        ) {
+          const taskPayload = buildTaskFromEvent(existing)
+          const t: Task = {
+            id: uid(),
+            ...taskPayload,
+            description: null,
+            assignee_ids: [],
+            link: null,
+            created_at: now(),
+            updated_at: now(),
+          }
+          db.tasks.push(t)
+          existing.task_id = t.id
+        }
         write(db)
         return existing
       }
+    }
+    const wantsTask =
+      (input.event_type ?? "meeting") === "meeting" ||
+      input.event_type === "call"
+    let task_id: string | null = null
+    if (wantsTask) {
+      const taskPayload = buildTaskFromEvent({
+        title: input.title,
+        start_at: input.start_at,
+        event_type: input.event_type ?? "meeting",
+        client_id: input.client_id ?? null,
+        lead_id: input.lead_id ?? null,
+      })
+      const t: Task = {
+        id: uid(),
+        ...taskPayload,
+        description: null,
+        assignee_ids: [],
+        link: null,
+        created_at: now(),
+        updated_at: now(),
+      }
+      db.tasks.push(t)
+      task_id = t.id
     }
     const e: Event = {
       id: uid(),
@@ -555,7 +602,7 @@ const localStore = {
       lead_id: input.lead_id ?? null,
       attendees: input.attendees ?? [],
       cal_booking_id: input.cal_booking_id ?? null,
-      task_id: null,
+      task_id,
       created_at: now(),
     }
     db.events.push(e)
@@ -572,6 +619,17 @@ const localStore = {
     const e = db.events.find((x) => x.id === id)
     if (!e) return null
     Object.assign(e, patch)
+    // Mirror title/time to the paired task. One-directional (event -> task).
+    if (e.task_id && (patch.title !== undefined || patch.start_at !== undefined)) {
+      const t = db.tasks.find((x) => x.id === e.task_id)
+      if (t) {
+        const mirror = buildTaskFromEvent(e)
+        t.title = mirror.title
+        t.due_date = mirror.due_date
+        t.due_time = mirror.due_time
+        t.updated_at = now()
+      }
+    }
     record(db, "event_updated", `Event updated — ${e.title}`, {
       lead_id: e.lead_id,
       client_id: e.client_id,
@@ -582,7 +640,16 @@ const localStore = {
 
   deleteEvent(id: string) {
     const db = read()
-    db.events = db.events.filter((e) => e.id !== id)
+    const e = db.events.find((x) => x.id === id)
+    if (!e) return
+    if (e.cal_booking_id) {
+      throw new EventBlockedByCalCom(e.cal_booking_id)
+    }
+    // In-app event: cascade-delete the paired task too.
+    if (e.task_id) {
+      db.tasks = db.tasks.filter((t) => t.id !== e.task_id)
+    }
+    db.events = db.events.filter((x) => x.id !== id)
     write(db)
   },
 
