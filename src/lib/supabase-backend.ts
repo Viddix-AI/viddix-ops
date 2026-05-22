@@ -71,6 +71,71 @@ function logActivity(a: Omit<Activity, "id" | "created_at" | "actor_id"> & { act
   })()
 }
 
+// Materialise a Client (and optional client_partners row) for a lead that is
+// transitioning to stage="won". Idempotent: if the lead already has a
+// `converted_client_id` pointing to an existing client, returns that client
+// without inserting anything. Does NOT touch the leads row — the caller
+// updates `converted_client_id` (and any other lead fields) as part of its
+// own update so the operation stays a single round-trip per code path.
+async function ensureClientForWonLead(lead: Lead): Promise<Client> {
+  if (lead.converted_client_id) {
+    const existing = await db()
+      .from("clients")
+      .select("*")
+      .eq("id", lead.converted_client_id)
+      .maybeSingle()
+    if (existing.data) return existing.data as Client
+  }
+  const r = await db()
+    .from("clients")
+    .insert({
+      name: lead.company ?? lead.name,
+      contact_name: lead.name,
+      contact_email: lead.email,
+      contact_phone: lead.phone,
+      mrr: lead.value,
+      industry: null,
+      website: lead.website,
+      notes: lead.notes,
+      started_at: new Date().toISOString().slice(0, 10),
+      owner_id: lead.owner_id,
+    })
+    .select()
+    .single()
+  const client = unwrap(r, "ensureClientForWonLead") as Client
+  if (lead.partner_id) {
+    await db()
+      .from("client_partners")
+      .upsert(
+        {
+          client_id: client.id,
+          partner_id: lead.partner_id,
+          split_pct: lead.partner_split_pct ?? 0,
+        },
+        { onConflict: "client_id,partner_id" }
+      )
+    logActivity({
+      kind: "partner_attached",
+      message: `Partner attached to ${client.name}`,
+      lead_id: lead.id,
+      client_id: client.id,
+      partner_id: lead.partner_id,
+      task_id: null,
+      actor_id: null,
+    })
+  }
+  logActivity({
+    kind: "lead_converted",
+    message: `${lead.name} converted to client`,
+    lead_id: lead.id,
+    client_id: client.id,
+    partner_id: null,
+    task_id: null,
+    actor_id: null,
+  })
+  return client
+}
+
 export const supabaseBackend: Backend = {
   async reset() {
     // No-op against Supabase — destroying real production data on a click is
@@ -194,17 +259,45 @@ export const supabaseBackend: Backend = {
       task_id: null,
       actor_id: null,
     })
+    if (lead.stage === "won" && !lead.converted_client_id) {
+      const client = await ensureClientForWonLead(lead)
+      await db()
+        .from("leads")
+        .update({ converted_client_id: client.id })
+        .eq("id", lead.id)
+      return { ...lead, converted_client_id: client.id }
+    }
     return lead
   },
   async updateLead(id, patch) {
-    const r = await db().from("leads").update(patch).eq("id", id).select().single()
+    let effectivePatch = patch
+    if (patch.stage !== undefined) {
+      const lead = (await this.lead(id)) as Lead | null
+      if (!lead) throw new Error(`Supabase: updateLead — lead ${id} not found`)
+      if (lead.converted_client_id && patch.stage !== "won") {
+        throw new Error("Cannot change stage of a converted lead")
+      }
+      if (patch.stage === "won" && !lead.converted_client_id) {
+        const client = await ensureClientForWonLead(lead)
+        effectivePatch = { ...patch, converted_client_id: client.id }
+      }
+    }
+    const r = await db().from("leads").update(effectivePatch).eq("id", id).select().single()
     if (r.error) throw new Error(`Supabase: updateLead — ${r.error.message}`)
     return r.data as Lead
   },
   async moveLead(id, toStage, toIndex) {
-    // Two-step: update target row, then renormalize positions inside the
-    // destination stage. Source stage will renormalise on its next move.
-    const u = await db().from("leads").update({ stage: toStage, position: toIndex }).eq("id", id)
+    const lead = (await this.lead(id)) as Lead | null
+    if (!lead) throw new Error(`Supabase: moveLead — lead ${id} not found`)
+    if (lead.converted_client_id && toStage !== "won") {
+      throw new Error("Cannot move a converted lead out of won")
+    }
+    const update: Partial<Lead> = { stage: toStage, position: toIndex }
+    if (toStage === "won" && !lead.converted_client_id) {
+      const client = await ensureClientForWonLead(lead)
+      update.converted_client_id = client.id
+    }
+    const u = await db().from("leads").update(update).eq("id", id)
     if (u.error) throw new Error(`Supabase: moveLead — ${u.error.message}`)
     logActivity({
       kind: "lead_moved",
@@ -232,63 +325,13 @@ export const supabaseBackend: Backend = {
   async convertLeadToClient(id) {
     const lead = (await this.lead(id)) as Lead | null
     if (!lead) return null
-    if (lead.converted_client_id) {
-      const existing = await this.client(lead.converted_client_id)
-      if (existing) return existing
-    }
-    const r = await db()
-      .from("clients")
-      .insert({
-        name: lead.company ?? lead.name,
-        contact_name: lead.name,
-        contact_email: lead.email,
-        contact_phone: lead.phone,
-        mrr: lead.value,
-        industry: null,
-        website: lead.website,
-        notes: lead.notes,
-        started_at: new Date().toISOString().slice(0, 10),
-        owner_id: lead.owner_id,
-      })
-      .select()
-      .single()
-    const client = unwrap(r, "convertLeadToClient") as Client
-    await db()
-      .from("leads")
-      .update({ stage: "won", converted_client_id: client.id })
-      .eq("id", lead.id)
-    // Materialise the lead's pre-allocated partner as a client_partners row
-    // so the split survives conversion.
-    if (lead.partner_id) {
+    const client = await ensureClientForWonLead(lead)
+    if (lead.stage !== "won" || lead.converted_client_id !== client.id) {
       await db()
-        .from("client_partners")
-        .upsert(
-          {
-            client_id: client.id,
-            partner_id: lead.partner_id,
-            split_pct: lead.partner_split_pct ?? 0,
-          },
-          { onConflict: "client_id,partner_id" }
-        )
-      logActivity({
-        kind: "partner_attached",
-        message: `Partner attached to ${client.name}`,
-        lead_id: lead.id,
-        client_id: client.id,
-        partner_id: lead.partner_id,
-        task_id: null,
-        actor_id: null,
-      })
+        .from("leads")
+        .update({ stage: "won", converted_client_id: client.id })
+        .eq("id", lead.id)
     }
-    logActivity({
-      kind: "lead_converted",
-      message: `${lead.name} converted to client`,
-      lead_id: lead.id,
-      client_id: client.id,
-      partner_id: null,
-      task_id: null,
-      actor_id: null,
-    })
     return client
   },
 
@@ -387,6 +430,7 @@ export const supabaseBackend: Backend = {
       lead_id: input.lead_id ?? null,
       attendees: input.attendees ?? [],
       cal_booking_id: input.cal_booking_id ?? null,
+      task_id: input.task_id ?? null,
     }
     const r = input.cal_booking_id
       ? await db()
