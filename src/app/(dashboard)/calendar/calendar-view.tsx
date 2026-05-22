@@ -114,7 +114,13 @@ export function CalendarView() {
   }
 
   // Bucket all events + tasks by ISO day key — used by every view + the
-  // sidebar's today panel.
+  // sidebar's today panel. Tasks paired with an event are skipped here: the
+  // event already represents the meeting on the calendar; the shadow task
+  // only exists to surface the meeting in /tasks.
+  const pairedTaskIds = React.useMemo(
+    () => new Set(events.map((e) => e.task_id).filter((id): id is string => !!id)),
+    [events]
+  )
   const buckets = React.useMemo(() => {
     const map = new Map<string, Item[]>()
     const push = (k: string, item: Item) => {
@@ -150,6 +156,7 @@ export function CalendarView() {
     }
     for (const t of tasks) {
       if (!t.due_date) continue
+      if (pairedTaskIds.has(t.id)) continue
       const client = clients.find((c) => c.id === t.client_id)
       const lead = leads.find((l) => l.id === t.lead_id)
       push(t.due_date, {
@@ -172,7 +179,7 @@ export function CalendarView() {
       })
     }
     return map
-  }, [events, tasks, clients, leads])
+  }, [events, tasks, clients, leads, pairedTaskIds])
 
   // ── Header navigation per view ──────────────────────────────────────────
   function navPrev() {

@@ -82,11 +82,16 @@ export function TimeGrid({
   const todayKey = isoDay(today)
 
   // Bucket items into per-day columns + an all-day list of tasks without
-  // due_time. Events without end_at default to 60 min duration.
+  // due_time. Events without end_at default to 60 min duration. Tasks that
+  // are paired with an event are skipped — the event already represents the
+  // meeting; the shadow task only exists so it appears in /tasks.
   const { columns, allDayTasks } = React.useMemo(() => {
     const dayKeys = days.map(isoDay)
     const columns: GridItem[][] = days.map(() => [])
     const allDayTasks: { task: Task; dayIdx: number }[] = []
+    const pairedTaskIds = new Set(
+      events.map((e) => e.task_id).filter((id): id is string => !!id)
+    )
 
     for (const e of events) {
       const start = new Date(e.start_at)
@@ -113,6 +118,7 @@ export function TimeGrid({
 
     for (const t of tasks) {
       if (!t.due_date) continue
+      if (pairedTaskIds.has(t.id)) continue
       const dayIdx = dayKeys.indexOf(t.due_date)
       if (dayIdx === -1) continue
       const timeMin = parseHHmmToMin(t.due_time)
