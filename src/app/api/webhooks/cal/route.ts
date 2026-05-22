@@ -14,6 +14,7 @@
 
 import crypto from "node:crypto"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
+import { buildTaskFromEvent } from "@/lib/data-store"
 
 export const runtime = "nodejs"
 
@@ -56,11 +57,6 @@ export async function POST(req: Request) {
     return Response.json({ ok: false, error: "bad-json" }, { status: 400 })
   }
 
-  console.log("cal webhook received", {
-    triggerEvent: body.triggerEvent,
-    payload: body.payload,
-  })
-
   const supabase = createClient(url, serviceKey, {
     auth: { persistSession: false },
   })
@@ -93,7 +89,6 @@ async function upsertBooking(supabase: SupabaseClient, p: CalPayload["payload"])
   const inviteeEmail = p.attendees?.[0]?.email ?? null
   const ownerEmail = p.organizer?.email ?? null
 
-  // Best-effort mapping. Failures are non-fatal — the event still saves.
   const ownerId = ownerEmail ? await profileIdByEmail(supabase, ownerEmail) : null
   const { leadId, clientId } = inviteeEmail
     ? await leadOrClientByEmail(supabase, inviteeEmail)
@@ -111,18 +106,91 @@ async function upsertBooking(supabase: SupabaseClient, p: CalPayload["payload"])
     cal_booking_id: p.uid,
   }
 
-  const { error } = await supabase
+  const { data: event, error } = await supabase
     .from("events")
     .upsert(row, { onConflict: "cal_booking_id" })
-  if (error) throw new Error(`upsert events: ${error.message}`)
+    .select("id, title, start_at, event_type, client_id, lead_id, task_id")
+    .single()
+  if (error || !event) throw new Error(`upsert events: ${error?.message ?? "no row"}`)
+
+  await ensurePairedTask(supabase, event)
 }
 
 async function cancelBooking(supabase: SupabaseClient, uid: string) {
+  // Look up the row first so we can clear the FK before deleting. The webhook
+  // bypasses the EventBlockedByCalCom guard intentionally — Cal.com IS the
+  // authoritative deleter here.
+  const { data: event } = await supabase
+    .from("events")
+    .select("id, task_id")
+    .eq("cal_booking_id", uid)
+    .maybeSingle()
+  if (!event) return  // already gone
+
+  if (event.task_id) {
+    const { error: ue } = await supabase
+      .from("events")
+      .update({ task_id: null })
+      .eq("id", event.id)
+    if (ue) console.warn(`cancel: detach task failed: ${ue.message}`)
+  }
+
   const { error } = await supabase
     .from("events")
     .delete()
-    .eq("cal_booking_id", uid)
+    .eq("id", event.id)
   if (error) throw new Error(`delete events: ${error.message}`)
+}
+
+async function ensurePairedTask(
+  supabase: SupabaseClient,
+  event: { id: string; title: string; start_at: string; event_type: string; client_id: string | null; lead_id: string | null; task_id: string | null }
+): Promise<void> {
+  // The webhook only sends meeting bookings, but be defensive.
+  if (event.event_type !== "meeting" && event.event_type !== "call") return
+
+  const payload = buildTaskFromEvent(event)
+
+  if (event.task_id) {
+    // Mirror title/time to existing task.
+    const { error } = await supabase
+      .from("tasks")
+      .update({
+        title: payload.title,
+        due_date: payload.due_date,
+        due_time: payload.due_time,
+      })
+      .eq("id", event.task_id)
+    if (error) console.warn(`webhook task mirror failed: ${error.message}`)
+    return
+  }
+
+  // No paired task yet — create one and link.
+  const { data: task, error: te } = await supabase
+    .from("tasks")
+    .insert({
+      title: payload.title,
+      description: null,
+      due_date: payload.due_date,
+      due_time: payload.due_time,
+      priority: payload.priority,
+      status: payload.status,
+      assignee_ids: [],
+      link: null,
+      client_id: payload.client_id,
+      lead_id: payload.lead_id,
+    })
+    .select("id")
+    .single()
+  if (te || !task) {
+    console.warn(`webhook task create failed: ${te?.message ?? "no data"}`)
+    return
+  }
+  const { error: ue } = await supabase
+    .from("events")
+    .update({ task_id: task.id })
+    .eq("id", event.id)
+  if (ue) console.warn(`webhook event link failed: ${ue.message}`)
 }
 
 // ── Mapping helpers ──────────────────────────────────────────────────────
