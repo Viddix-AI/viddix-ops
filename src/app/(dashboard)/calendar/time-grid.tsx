@@ -14,6 +14,8 @@
 import * as React from "react"
 import Link from "next/link"
 
+import { Lock } from "lucide-react"
+
 import { cn } from "@/lib/utils"
 import {
   END_HOUR,
@@ -159,6 +161,10 @@ export function TimeGrid({
   }
 
   function beginDrag(mode: Drag["mode"], item: GridItem, e: React.PointerEvent) {
+    if (item.kind === "event" && item.event.cal_booking_id) {
+      onSelectItem?.(item)
+      return
+    }
     e.preventDefault()
     e.stopPropagation()
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
@@ -479,14 +485,17 @@ function Block({
       }}
       onPointerDown={onBodyPointerDown}
     >
+      {item.kind === "event" && item.event.cal_booking_id && (
+        <Lock className="absolute right-1 top-1 size-2.5 opacity-70" aria-label="From Cal.com" />
+      )}
       <div className="flex min-w-0 items-baseline gap-1.5 leading-tight">
         <span className="min-w-0 flex-1 truncate font-semibold">{item.title}</span>
         <span className="shrink-0 text-[9px] tabular-nums opacity-70">
           {liveTimeLabel(item, liveStartMin, liveEndMin)}
         </span>
       </div>
-      {/* Resize handle — last few pixels, ns-resize cursor. Tasks don't resize. */}
-      {item.kind === "event" && (
+      {/* Resize handle — last few pixels, ns-resize cursor. Tasks don't resize. Cal.com events are locked. */}
+      {item.kind === "event" && !item.event.cal_booking_id && (
         <div
           className="absolute inset-x-0 bottom-0 h-1.5 cursor-ns-resize"
           onPointerDown={onResizePointerDown}
