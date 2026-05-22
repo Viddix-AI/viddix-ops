@@ -14,7 +14,34 @@
 
 import crypto from "node:crypto"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
-import { buildTaskFromEvent } from "@/lib/data-store"
+
+// Local copy of the helper from src/lib/data-store.ts so this route doesn't
+// import a "use client" module. Crossing the server/client boundary in App
+// Router with that import was the prime suspect for the silent task-create
+// failure we were seeing in production.
+function buildTaskFromEvent(e: {
+  title: string
+  start_at: string
+  event_type: string
+  client_id: string | null
+  lead_id: string | null
+}) {
+  const d = new Date(e.start_at)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  const hh = String(d.getHours()).padStart(2, "0")
+  const mm = String(d.getMinutes()).padStart(2, "0")
+  return {
+    title: e.title.trim() || (e.event_type.charAt(0).toUpperCase() + e.event_type.slice(1)),
+    due_date: `${y}-${m}-${day}`,
+    due_time: `${hh}:${mm}`,
+    status: "todo" as const,
+    priority: "medium" as const,
+    client_id: e.client_id,
+    lead_id: e.lead_id,
+  }
+}
 
 export const runtime = "nodejs"
 
@@ -212,13 +239,20 @@ async function ensurePairedTask(
   supabase: SupabaseClient,
   event: { id: string; title: string; start_at: string; event_type: string; client_id: string | null; lead_id: string | null; task_id: string | null }
 ): Promise<void> {
-  // The webhook only sends meeting bookings, but be defensive.
-  if (event.event_type !== "meeting" && event.event_type !== "call") return
+  console.log("ensurePairedTask: enter", {
+    event_id: event.id,
+    event_type: event.event_type,
+    has_task_id: !!event.task_id,
+  })
+
+  if (event.event_type !== "meeting" && event.event_type !== "call") {
+    console.log("ensurePairedTask: skip — non-meeting event_type")
+    return
+  }
 
   const payload = buildTaskFromEvent(event)
 
   if (event.task_id) {
-    // Mirror title/time to existing task.
     const { error } = await supabase
       .from("tasks")
       .update({
@@ -227,36 +261,48 @@ async function ensurePairedTask(
         due_time: payload.due_time,
       })
       .eq("id", event.task_id)
-    if (error) console.warn(`webhook task mirror failed: ${error.message}`)
+    if (error) {
+      console.error("ensurePairedTask: mirror failed", error)
+    } else {
+      console.log("ensurePairedTask: mirrored task", event.task_id)
+    }
     return
   }
 
-  // No paired task yet — create one and link.
+  const insertRow = {
+    title: payload.title,
+    description: null,
+    due_date: payload.due_date,
+    due_time: payload.due_time,
+    priority: payload.priority,
+    status: payload.status,
+    assignee_ids: [],
+    link: null,
+    client_id: payload.client_id,
+    lead_id: payload.lead_id,
+  }
+  console.log("ensurePairedTask: inserting task", insertRow)
+
   const { data: task, error: te } = await supabase
     .from("tasks")
-    .insert({
-      title: payload.title,
-      description: null,
-      due_date: payload.due_date,
-      due_time: payload.due_time,
-      priority: payload.priority,
-      status: payload.status,
-      assignee_ids: [],
-      link: null,
-      client_id: payload.client_id,
-      lead_id: payload.lead_id,
-    })
+    .insert(insertRow)
     .select("id")
     .single()
   if (te || !task) {
-    console.warn(`webhook task create failed: ${te?.message ?? "no data"}`)
+    console.error("ensurePairedTask: task insert failed", te)
     return
   }
+  console.log("ensurePairedTask: task inserted", task.id)
+
   const { error: ue } = await supabase
     .from("events")
     .update({ task_id: task.id })
     .eq("id", event.id)
-  if (ue) console.warn(`webhook event link failed: ${ue.message}`)
+  if (ue) {
+    console.error("ensurePairedTask: event link failed", ue)
+  } else {
+    console.log("ensurePairedTask: linked event", event.id, "→ task", task.id)
+  }
 }
 
 // ── Mapping helpers ──────────────────────────────────────────────────────
