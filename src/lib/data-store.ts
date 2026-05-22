@@ -35,7 +35,7 @@ import type {
 // keys are abandoned (the user's data on disk stays under the older key, but
 // a fresh seed is written here). Increment whenever a new required field is
 // added so refresh doesn't render with a half-shaped record.
-const KEY = "viddix-ops:v6"
+const KEY = "viddix-ops:v7"
 
 type DB = {
   profiles: Profile[]
@@ -108,6 +108,7 @@ function read(): DB {
       events:          (parsed.events ?? fresh.events).map((e) => ({
         ...e,
         cal_booking_id: e.cal_booking_id ?? null,
+        task_id: e.task_id ?? null,
       })),
       notes:           parsed.notes           ?? fresh.notes,
       partners:        parsed.partners        ?? fresh.partners,
