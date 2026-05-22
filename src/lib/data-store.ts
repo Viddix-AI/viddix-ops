@@ -160,6 +160,56 @@ function record(
   }
 }
 
+// ── Event<->Task pairing helpers ─────────────────────────────────────────────
+
+/** Thrown by deleteEvent when the row originated from Cal.com. The calendar UI
+ *  catches this and shows a "Cancel in Cal.com" hint instead. */
+export class EventBlockedByCalCom extends Error {
+  readonly cal_booking_id: string
+  constructor(cal_booking_id: string) {
+    super("This event came from Cal.com. Cancel it in Cal.com to remove it.")
+    this.name = "EventBlockedByCalCom"
+    this.cal_booking_id = cal_booking_id
+  }
+}
+
+/** Build a `tasks` insert payload from an event. Used by createEvent
+ *  auto-pairing and the Cal.com webhook handler. Title falls back to the
+ *  capitalized event type when blank. Date/time are extracted in the local
+ *  timezone so a 23:30 booking in Madrid lands on the same day in the tasks
+ *  list, not the UTC-next day. */
+export function buildTaskFromEvent(e: {
+  title: string
+  start_at: string
+  event_type: string
+  client_id: string | null
+  lead_id: string | null
+}): {
+  title: string
+  due_date: string
+  due_time: string
+  status: "todo"
+  priority: "medium"
+  client_id: string | null
+  lead_id: string | null
+} {
+  const d = new Date(e.start_at)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  const hh = String(d.getHours()).padStart(2, "0")
+  const mm = String(d.getMinutes()).padStart(2, "0")
+  return {
+    title: e.title.trim() || (e.event_type.charAt(0).toUpperCase() + e.event_type.slice(1)),
+    due_date: `${y}-${m}-${day}`,
+    due_time: `${hh}:${mm}`,
+    status: "todo",
+    priority: "medium",
+    client_id: e.client_id,
+    lead_id: e.lead_id,
+  }
+}
+
 const localStore = {
   reset() {
     const fresh = seed()
