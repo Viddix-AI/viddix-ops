@@ -210,9 +210,9 @@ async function upsertBooking(
 }
 
 async function cancelBooking(supabase: SupabaseClient, uid: string) {
-  // Look up the row first so we can clear the FK before deleting. The webhook
-  // bypasses the EventBlockedByCalCom guard intentionally — Cal.com IS the
-  // authoritative deleter here.
+  // Cal.com IS the authoritative deleter here — bypass the in-app guard.
+  // Cascade the delete to the paired task too: when a booking goes, the
+  // user expects everything tied to that meeting to go with it.
   const { data: event } = await supabase
     .from("events")
     .select("id, task_id")
@@ -220,19 +220,21 @@ async function cancelBooking(supabase: SupabaseClient, uid: string) {
     .maybeSingle()
   if (!event) return  // already gone
 
-  if (event.task_id) {
-    const { error: ue } = await supabase
-      .from("events")
-      .update({ task_id: null })
-      .eq("id", event.id)
-    if (ue) console.warn(`cancel: detach task failed: ${ue.message}`)
-  }
-
-  const { error } = await supabase
+  // Delete the event first so the FK on tasks (via events.task_id) drops to
+  // null; then delete the task itself.
+  const { error: de } = await supabase
     .from("events")
     .delete()
     .eq("id", event.id)
-  if (error) throw new Error(`delete events: ${error.message}`)
+  if (de) throw new Error(`delete events: ${de.message}`)
+
+  if (event.task_id) {
+    const { error: dt } = await supabase
+      .from("tasks")
+      .delete()
+      .eq("id", event.task_id)
+    if (dt) console.warn(`cancel: paired task delete failed: ${dt.message}`)
+  }
 }
 
 async function ensurePairedTask(
