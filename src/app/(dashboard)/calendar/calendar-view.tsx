@@ -22,6 +22,7 @@ import { useLeads } from "@/hooks/use-leads"
 import { useTasks, useUpdateTask } from "@/hooks/use-tasks"
 import { downloadFile } from "@/lib/csv"
 import { buildIcs, googleCalendarUrl, type IcsItem } from "@/lib/ics"
+import { isoDay } from "@/lib/time-grid-math"
 import { cn } from "@/lib/utils"
 import { AddEventDialog } from "./add-event-dialog"
 import { TimeGrid } from "./time-grid"
@@ -78,9 +79,6 @@ function addDays(d: Date, n: number) {
   const x = new Date(d)
   x.setDate(x.getDate() + n)
   return x
-}
-function isoDay(d: Date) {
-  return d.toISOString().slice(0, 10)
 }
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
