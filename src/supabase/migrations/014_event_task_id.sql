@@ -33,7 +33,7 @@ begin
     values (
       coalesce(nullif(e.title, ''), initcap(e.event_type::text)),
       (e.start_at at time zone 'Europe/Madrid')::date,
-      to_char((e.start_at at time zone 'Europe/Madrid'), 'HH24:MI'),
+      (e.start_at at time zone 'Europe/Madrid')::time,
       'todo',
       'medium',
       e.client_id,
