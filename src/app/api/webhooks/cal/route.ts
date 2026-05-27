@@ -14,34 +14,7 @@
 
 import crypto from "node:crypto"
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
-
-// Local copy of the helper from src/lib/data-store.ts so this route doesn't
-// import a "use client" module. Crossing the server/client boundary in App
-// Router with that import was the prime suspect for the silent task-create
-// failure we were seeing in production.
-function buildTaskFromEvent(e: {
-  title: string
-  start_at: string
-  event_type: string
-  client_id: string | null
-  lead_id: string | null
-}) {
-  const d = new Date(e.start_at)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, "0")
-  const day = String(d.getDate()).padStart(2, "0")
-  const hh = String(d.getHours()).padStart(2, "0")
-  const mm = String(d.getMinutes()).padStart(2, "0")
-  return {
-    title: e.title.trim() || (e.event_type.charAt(0).toUpperCase() + e.event_type.slice(1)),
-    due_date: `${y}-${m}-${day}`,
-    due_time: `${hh}:${mm}`,
-    status: "todo" as const,
-    priority: "medium" as const,
-    client_id: e.client_id,
-    lead_id: e.lead_id,
-  }
-}
+import { buildTaskFromEvent } from "@/lib/build-task-from-event"
 
 export const runtime = "nodejs"
 

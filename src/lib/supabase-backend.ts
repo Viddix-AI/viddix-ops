@@ -7,7 +7,8 @@
 
 import { createClient } from "@/lib/supabase/client"
 import type { Backend } from "@/lib/backend"
-import { buildTaskFromEvent, EventBlockedByCalCom } from "@/lib/data-store"
+import { buildTaskFromEvent } from "@/lib/build-task-from-event"
+import { EventBlockedByCalCom } from "@/lib/data-store"
 import type {
   Activity,
   Client,
