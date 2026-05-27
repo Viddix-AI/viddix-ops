@@ -20,6 +20,8 @@ import {
 import { SUPABASE_CONFIGURED } from "@/lib/backend"
 import { buildTaskFromEvent } from "@/lib/build-task-from-event"
 import { supabaseBackend } from "@/lib/supabase-backend"
+import { addDays, addMonths, addWeeks, addYears } from "date-fns"
+
 import type {
   Activity,
   ActivityKind,
@@ -32,6 +34,8 @@ import type {
   Partner,
   Profile,
   Task,
+  TaskRecurrence,
+  TaskTimeEntry,
 } from "@/lib/types"
 
 // Bump when the DB shape changes — old localStorage payloads under previous
@@ -46,6 +50,7 @@ type DB = {
   contacts: Contact[]
   leads: Lead[]
   tasks: Task[]
+  time_entries: TaskTimeEntry[]
   events: Event[]
   notes: Note[]
   partners: Partner[]
@@ -59,6 +64,7 @@ const seed = (): DB => ({
   contacts: structuredClone(SEED_CONTACTS),
   leads: structuredClone(SEED_LEADS),
   tasks: structuredClone(SEED_TASKS),
+  time_entries: [],
   events: structuredClone(SEED_EVENTS),
   notes: structuredClone(SEED_NOTES),
   partners: structuredClone(SEED_PARTNERS),
@@ -114,8 +120,16 @@ function read(): DB {
           assignee_ids: ids,
           link: t.link ?? null,
           due_time: t.due_time ?? null,
+          // Migration 018 fields — default for legacy localStorage payloads.
+          parent_id: t.parent_id ?? null,
+          recurrence: t.recurrence ?? "none",
+          recurrence_until: t.recurrence_until ?? null,
+          recurrence_parent_id: t.recurrence_parent_id ?? null,
+          estimate_minutes: t.estimate_minutes ?? null,
+          tracked_minutes: t.tracked_minutes ?? 0,
         }
       }),
+      time_entries:    parsed.time_entries    ?? fresh.time_entries,
       events:          (parsed.events ?? fresh.events).map((e) => ({
         ...e,
         cal_booking_id: e.cal_booking_id ?? null,
@@ -183,6 +197,23 @@ export class EventBlockedByCalCom extends Error {
     this.name = "EventBlockedByCalCom"
     this.cal_booking_id = cal_booking_id
   }
+}
+
+// Step a `YYYY-MM-DD` due date forward by one unit of recurrence. Used by
+// updateTask() when a recurring task is completed to spawn the next instance.
+// date-fns handles month/leap-year edges; we re-slice back to YYYY-MM-DD so
+// the local date stays the local date.
+function advanceDueDate(due: string, rec: TaskRecurrence): string {
+  const d = new Date(due + "T12:00:00")  // noon avoids DST midnight surprises
+  let next: Date
+  switch (rec) {
+    case "daily":   next = addDays(d, 1);   break
+    case "weekly":  next = addWeeks(d, 1);  break
+    case "monthly": next = addMonths(d, 1); break
+    case "yearly":  next = addYears(d, 1);  break
+    default:        return due
+  }
+  return next.toISOString().slice(0, 10)
 }
 
 // `buildTaskFromEvent` lives in src/lib/build-task-from-event.ts now so the
@@ -558,15 +589,29 @@ const localStore = {
       link: input.link ?? null,
       client_id: input.client_id ?? null,
       lead_id: input.lead_id ?? null,
+      parent_id: input.parent_id ?? null,
+      recurrence: input.recurrence ?? "none",
+      recurrence_until: input.recurrence_until ?? null,
+      recurrence_parent_id: input.recurrence_parent_id ?? null,
+      estimate_minutes: input.estimate_minutes ?? null,
+      tracked_minutes: input.tracked_minutes ?? 0,
       created_at: now(),
       updated_at: now(),
     }
     db.tasks.push(t)
-    record(db, "task_created", `Task created — ${t.title}`, {
-      task_id: t.id,
-      lead_id: t.lead_id,
-      client_id: t.client_id,
-    })
+    if (t.parent_id) {
+      record(db, "task_subtask_added", `Subtask added — ${t.title}`, {
+        task_id: t.id,
+        lead_id: t.lead_id,
+        client_id: t.client_id,
+      })
+    } else {
+      record(db, "task_created", `Task created — ${t.title}`, {
+        task_id: t.id,
+        lead_id: t.lead_id,
+        client_id: t.client_id,
+      })
+    }
     write(db)
     return t
   },
@@ -575,6 +620,7 @@ const localStore = {
     const db = read()
     const t = db.tasks.find((x) => x.id === id)
     if (!t) return null
+    const wasOpen = t.status !== "done"
     Object.assign(t, patch, { updated_at: now() })
     if (patch.status !== undefined) {
       record(
@@ -586,6 +632,40 @@ const localStore = {
         { task_id: t.id, lead_id: t.lead_id, client_id: t.client_id }
       )
     }
+    // Recurrence: when an open recurring task is completed, generate the next
+    // instance as a brand-new root task (parent_id=null, tracked_minutes=0,
+    // recurrence_parent_id chained back to the original root). Tasks paired
+    // with Cal.com events have recurrence='none' enforced upstream so they
+    // never trip this path.
+    if (
+      patch.status === "done" &&
+      wasOpen &&
+      t.recurrence !== "none" &&
+      t.due_date
+    ) {
+      const nextDue = advanceDueDate(t.due_date, t.recurrence)
+      if (!t.recurrence_until || nextDue <= t.recurrence_until) {
+        const next: Task = {
+          ...t,
+          id: uid(),
+          status: "todo",
+          due_date: nextDue,
+          parent_id: null,
+          recurrence_parent_id: t.recurrence_parent_id ?? t.id,
+          tracked_minutes: 0,
+          estimate_minutes: t.estimate_minutes,
+          created_at: now(),
+          updated_at: now(),
+        }
+        db.tasks.push(next)
+        record(
+          db,
+          "task_recurrence_generated",
+          `Next instance scheduled — ${next.title} (${nextDue})`,
+          { task_id: next.id, lead_id: next.lead_id, client_id: next.client_id }
+        )
+      }
+    }
     write(db)
     return t
   },
@@ -593,12 +673,25 @@ const localStore = {
   deleteTask(id: string) {
     const db = read()
     const t = db.tasks.find((x) => x.id === id)
-    // Detach any paired event so it survives with a null task_id. The event
-    // row remains because Cal-origin events MUST survive task deletion.
+    // Mirror the SQL cascades from migration 018:
+    //   tasks.parent_id ON DELETE CASCADE        → recursively delete children
+    //   task_time_entries.task_id ON DELETE CASCADE → drop sessions
+    // Build the full set of doomed task ids first so we can clean entries
+    // and events in one pass.
+    const doomed = new Set<string>()
+    const enqueue = (tid: string) => {
+      if (doomed.has(tid)) return
+      doomed.add(tid)
+      for (const c of db.tasks) {
+        if (c.parent_id === tid) enqueue(c.id)
+      }
+    }
+    enqueue(id)
     db.events = db.events.map((e) =>
-      e.task_id === id ? { ...e, task_id: null } : e
+      e.task_id && doomed.has(e.task_id) ? { ...e, task_id: null } : e
     )
-    db.tasks = db.tasks.filter((x) => x.id !== id)
+    db.time_entries = db.time_entries.filter((te) => !doomed.has(te.task_id))
+    db.tasks = db.tasks.filter((x) => !doomed.has(x.id))
     if (t) {
       record(db, "task_deleted", `Task deleted — ${t.title}`, {
         task_id: t.id,
@@ -607,6 +700,88 @@ const localStore = {
       })
     }
     write(db)
+  },
+
+  // ── time tracking ────────────────────────────────────────────────────────
+  startTimer(input: { taskId: string; userId: string | null }): TaskTimeEntry {
+    const db = read()
+    const task = db.tasks.find((x) => x.id === input.taskId)
+    if (!task) throw new Error("startTimer: task not found")
+    // One-open-per-user invariant — mirrors the partial unique index in SQL.
+    if (input.userId) {
+      const existing = db.time_entries.find(
+        (e) => e.user_id === input.userId && e.ended_at === null
+      )
+      if (existing) {
+        const blockedOn = db.tasks.find((x) => x.id === existing.task_id)
+        throw new Error(
+          `Timer already running on "${blockedOn?.title ?? "another task"}". Stop it first.`
+        )
+      }
+    }
+    const entry: TaskTimeEntry = {
+      id: uid(),
+      task_id: input.taskId,
+      user_id: input.userId,
+      started_at: now(),
+      ended_at: null,
+      duration_seconds: null,
+      note: null,
+      created_at: now(),
+    }
+    db.time_entries.push(entry)
+    record(db, "task_timer_started", `Timer started — ${task.title}`, {
+      task_id: task.id,
+      lead_id: task.lead_id,
+      client_id: task.client_id,
+      actor_id: input.userId,
+    })
+    write(db)
+    return entry
+  },
+
+  stopTimer(input: { entryId: string; note?: string | null }): TaskTimeEntry {
+    const db = read()
+    const entry = db.time_entries.find((e) => e.id === input.entryId)
+    if (!entry) throw new Error("stopTimer: entry not found")
+    if (entry.ended_at) return entry
+    const endedAtMs = Date.now()
+    const startedAtMs = new Date(entry.started_at).getTime()
+    const duration_seconds = Math.max(
+      0,
+      Math.floor((endedAtMs - startedAtMs) / 1000)
+    )
+    entry.ended_at = new Date(endedAtMs).toISOString()
+    entry.duration_seconds = duration_seconds
+    if (input.note !== undefined) entry.note = input.note
+    // Bump the task's denormalised minutes counter. Round to minutes so the
+    // UI never displays "0m" for a 35-second session.
+    const task = db.tasks.find((t) => t.id === entry.task_id)
+    if (task) {
+      task.tracked_minutes = (task.tracked_minutes ?? 0) + Math.round(duration_seconds / 60)
+      task.updated_at = now()
+      record(db, "task_timer_stopped", `Timer stopped — ${task.title}`, {
+        task_id: task.id,
+        lead_id: task.lead_id,
+        client_id: task.client_id,
+        actor_id: entry.user_id,
+      })
+    }
+    write(db)
+    return entry
+  },
+
+  openTimerFor(userId: string): TaskTimeEntry | null {
+    if (!userId) return null
+    return read().time_entries.find(
+      (e) => e.user_id === userId && e.ended_at === null
+    ) ?? null
+  },
+
+  timeEntriesFor(taskId: string): TaskTimeEntry[] {
+    return read()
+      .time_entries.filter((e) => e.task_id === taskId)
+      .sort((a, b) => b.started_at.localeCompare(a.started_at))
   },
 
   // ── events ───────────────────────────────────────────────────────────────
@@ -635,12 +810,20 @@ const localStore = {
           (existing.event_type === "meeting" || existing.event_type === "call")
         ) {
           const taskPayload = buildTaskFromEvent(existing)
+          // Cal.com-paired task invariants: parent_id=null (always root),
+          // recurrence='none' (Cal.com owns recurrence), tracked_minutes=0.
           const t: Task = {
             id: uid(),
             ...taskPayload,
             description: null,
             assignee_ids: [],
             link: null,
+            parent_id: null,
+            recurrence: "none",
+            recurrence_until: null,
+            recurrence_parent_id: null,
+            estimate_minutes: null,
+            tracked_minutes: 0,
             created_at: now(),
             updated_at: now(),
           }
@@ -669,6 +852,12 @@ const localStore = {
         description: null,
         assignee_ids: [],
         link: null,
+        parent_id: null,
+        recurrence: "none",
+        recurrence_until: null,
+        recurrence_parent_id: null,
+        estimate_minutes: null,
+        tracked_minutes: 0,
         created_at: now(),
         updated_at: now(),
       }

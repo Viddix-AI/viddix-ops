@@ -1,6 +1,7 @@
 // Database typing — kept in sync with src/supabase/migrations/001_init.sql
 // onwards. Recent additions: 015 (client contract/renewal dates), 016
-// (multi-contact per client), 017 (contact activity kinds).
+// (multi-contact per client), 017 (contact activity kinds), 018 (tasks plus:
+// subtasks/recurrence/time tracking), 019 (task-plus activity kinds).
 export type LeadStage =
   | "new"
   | "contacted"
@@ -12,6 +13,12 @@ export type LeadStage =
 
 export type TaskStatus = "todo" | "in_progress" | "done"
 export type TaskPriority = "low" | "medium" | "high" | "urgent"
+export type TaskRecurrence =
+  | "none"
+  | "daily"
+  | "weekly"
+  | "monthly"
+  | "yearly"
 export type EventType = "call" | "meeting" | "deadline" | "internal"
 export type LeadTemperature = "hot" | "warm" | "cold"
 
@@ -121,6 +128,10 @@ export type ActivityKind =
   | "contact_updated"
   | "contact_deleted"
   | "contact_set_primary"
+  | "task_subtask_added"
+  | "task_timer_started"
+  | "task_timer_stopped"
+  | "task_recurrence_generated"
 
 export type Activity = {
   id: string
@@ -157,8 +168,38 @@ export type Task = {
   link: string | null
   client_id: string | null
   lead_id: string | null
+  // Subtasks (migration 018). When set, this task is a child of `parent_id`
+  // and is hidden from the tasks-view root listing — it appears only under
+  // its parent when expanded. Tasks paired with Cal.com events MUST keep
+  // parent_id = null.
+  parent_id: string | null
+  // Recurrence (migration 018). When non-'none', completing this task spawns
+  // a new copy with the next due_date and the rest of the fields cloned.
+  // `recurrence_parent_id` points back at the chain's first task. Cal.com-
+  // paired tasks MUST keep recurrence='none' — Cal.com owns recurrence.
+  recurrence: TaskRecurrence
+  recurrence_until: string | null
+  recurrence_parent_id: string | null
+  // Time tracking (migration 018). `tracked_minutes` is the denormalised sum
+  // of task_time_entries.duration_seconds (rounded to minutes) so we don't
+  // SUM on every render.
+  estimate_minutes: number | null
+  tracked_minutes: number
   created_at: string
   updated_at: string
+}
+
+export type TaskTimeEntry = {
+  id: string
+  task_id: string
+  user_id: string | null
+  started_at: string
+  // Null while the entry is open. Closing the entry stamps `ended_at` +
+  // `duration_seconds` and bumps tasks.tracked_minutes accordingly.
+  ended_at: string | null
+  duration_seconds: number | null
+  note: string | null
+  created_at: string
 }
 
 export type Event = {
@@ -231,16 +272,42 @@ type Row<T, I = Insert<T>, U = Update<T>> = {
 export type Database = {
   public: {
     Tables: {
-      profiles:        Row<Profile>
-      clients:         Row<Client>
-      contacts:        Row<Contact>
-      leads:           Row<Lead>
-      tasks:           Row<Task>
-      events:          Row<Event>
-      notes:           Row<Note>
-      partners:        Row<Partner>
-      client_partners: Row<ClientPartner>
-      activities:      Row<Activity>
+      profiles:           Row<Profile>
+      clients:            Row<Client>
+      contacts:           Row<Contact>
+      leads:              Row<Lead>
+      // tasks: the migration-018 columns (tracked_minutes, recurrence, parent_id,
+      // recurrence_until, recurrence_parent_id, estimate_minutes) have DB defaults
+      // or are nullable, so they're optional on Insert. Without this override the
+      // strict Row<T> generic would force every call site to pass tracked_minutes: 0.
+      tasks: Row<
+        Task,
+        Omit<Insert<Task>, "tracked_minutes" | "recurrence" | "parent_id"
+          | "recurrence_until" | "recurrence_parent_id" | "estimate_minutes"> & {
+          tracked_minutes?: number
+          recurrence?: TaskRecurrence
+          parent_id?: string | null
+          recurrence_until?: string | null
+          recurrence_parent_id?: string | null
+          estimate_minutes?: number | null
+        }
+      >
+      // task_time_entries: started_at has a DB default, the rest are nullable
+      // closing fields populated by stopTimer.
+      task_time_entries: Row<
+        TaskTimeEntry,
+        Omit<Insert<TaskTimeEntry>, "started_at" | "ended_at" | "duration_seconds" | "note"> & {
+          started_at?: string
+          ended_at?: string | null
+          duration_seconds?: number | null
+          note?: string | null
+        }
+      >
+      events:             Row<Event>
+      notes:              Row<Note>
+      partners:           Row<Partner>
+      client_partners:    Row<ClientPartner>
+      activities:         Row<Activity>
     }
     Views: Record<string, never>
     Functions: Record<string, never>
@@ -248,6 +315,7 @@ export type Database = {
       lead_stage: LeadStage
       task_status: TaskStatus
       task_priority: TaskPriority
+      task_recurrence: TaskRecurrence
       event_type: EventType
       lead_temperature: LeadTemperature
       contact_role: ContactRole

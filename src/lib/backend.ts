@@ -14,6 +14,7 @@ import type {
   Partner,
   Profile,
   Task,
+  TaskTimeEntry,
 } from "@/lib/types"
 
 export interface Backend {
@@ -61,6 +62,14 @@ export interface Backend {
   createTask(input: Partial<Task> & { title: string }): Promise<Task>
   updateTask(id: string, patch: Partial<Task>):         Promise<Task | null>
   deleteTask(id: string):                               Promise<void>
+
+  // Time tracking (migration 018). startTimer enforces the one-open-per-user
+  // invariant from the partial unique index. stopTimer closes the entry AND
+  // bumps tasks.tracked_minutes by round(duration / 60).
+  startTimer(input: { taskId: string; userId: string | null }): Promise<TaskTimeEntry>
+  stopTimer(input: { entryId: string; note?: string | null }):  Promise<TaskTimeEntry>
+  openTimerFor(userId: string):  Promise<TaskTimeEntry | null>
+  timeEntriesFor(taskId: string): Promise<TaskTimeEntry[]>
 
   // Events
   createEvent(input: Partial<Event> & { title: string; start_at: string }): Promise<Event>

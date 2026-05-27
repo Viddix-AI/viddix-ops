@@ -1,5 +1,6 @@
 import * as React from "react"
 
+import { ActiveTimerBanner } from "@/components/dashboard/active-timer-banner"
 import { KeyboardShortcutsClient } from "@/components/dashboard/keyboard-shortcuts"
 import { Sidebar } from "@/components/dashboard/sidebar"
 import { Topbar } from "@/components/dashboard/topbar"
@@ -21,6 +22,7 @@ export default function DashboardLayout({
       </div>
       <TaskRemindersClient />
       <KeyboardShortcutsClient />
+      <ActiveTimerBanner />
     </div>
   )
 }

@@ -10,9 +10,12 @@ import {
   Mail,
   Move,
   Pencil,
+  Play,
   Plus,
+  Repeat,
   RotateCcw,
   Sparkles,
+  Square,
   Star,
   Trash2,
   UserPlus,
@@ -71,6 +74,10 @@ const ICON: Record<ActivityKind, { icon: LucideIcon; tone: PillTone }> = {
   contact_updated:     { icon: Pencil,      tone: "slate" },
   contact_deleted:     { icon: Trash2,      tone: "rose" },
   contact_set_primary: { icon: Star,        tone: "amber" },
+  task_subtask_added:        { icon: Plus,        tone: "amber" },
+  task_timer_started:        { icon: Play,        tone: "emerald" },
+  task_timer_stopped:        { icon: Square,      tone: "slate" },
+  task_recurrence_generated: { icon: Repeat,      tone: "indigo" },
 }
 
 function dayKey(iso: string): string {

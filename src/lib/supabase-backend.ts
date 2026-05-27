@@ -9,6 +9,8 @@ import { createClient } from "@/lib/supabase/client"
 import type { Backend } from "@/lib/backend"
 import { buildTaskFromEvent } from "@/lib/build-task-from-event"
 import { EventBlockedByCalCom } from "@/lib/data-store"
+import { addDays, addMonths, addWeeks, addYears } from "date-fns"
+
 import type {
   Activity,
   Client,
@@ -20,7 +22,22 @@ import type {
   Partner,
   Profile,
   Task,
+  TaskRecurrence,
+  TaskTimeEntry,
 } from "@/lib/types"
+
+function advanceDueDate(due: string, rec: TaskRecurrence): string {
+  const d = new Date(due + "T12:00:00")
+  let next: Date
+  switch (rec) {
+    case "daily":   next = addDays(d, 1);   break
+    case "weekly":  next = addWeeks(d, 1);  break
+    case "monthly": next = addMonths(d, 1); break
+    case "yearly":  next = addYears(d, 1);  break
+    default:        return due
+  }
+  return next.toISOString().slice(0, 10)
+}
 
 function db() {
   return createClient()
@@ -552,21 +569,204 @@ export const supabaseBackend: Backend = {
         link: input.link ?? null,
         client_id: input.client_id ?? null,
         lead_id: input.lead_id ?? null,
+        parent_id: input.parent_id ?? null,
+        recurrence: input.recurrence ?? "none",
+        recurrence_until: input.recurrence_until ?? null,
+        recurrence_parent_id: input.recurrence_parent_id ?? null,
+        estimate_minutes: input.estimate_minutes ?? null,
       })
       .select()
       .single()
-    return unwrap(r, "createTask") as Task
+    const task = unwrap(r, "createTask") as Task
+    if (task.parent_id) {
+      logActivity({
+        kind: "task_subtask_added",
+        message: `Subtask added — ${task.title}`,
+        lead_id: task.lead_id,
+        client_id: task.client_id,
+        partner_id: null,
+        task_id: task.id,
+        actor_id: null,
+      })
+    }
+    return task
   },
   async updateTask(id, patch) {
+    // Load current state if we may need to spawn the next recurrence
+    // instance — only when the patch transitions status to done.
+    const willComplete = patch.status === "done"
+    const before = willComplete
+      ? ((await db().from("tasks").select("*").eq("id", id).maybeSingle()).data as Task | null)
+      : null
+
     const r = await db().from("tasks").update(patch).eq("id", id).select().single()
     if (r.error) throw new Error(`Supabase: updateTask — ${r.error.message}`)
-    return r.data as Task
+    const task = r.data as Task
+
+    if (willComplete && before && before.status !== "done" && task.recurrence !== "none" && task.due_date) {
+      const nextDue = advanceDueDate(task.due_date, task.recurrence)
+      if (!task.recurrence_until || nextDue <= task.recurrence_until) {
+        const next = await db()
+          .from("tasks")
+          .insert({
+            title: task.title,
+            description: task.description,
+            due_date: nextDue,
+            due_time: task.due_time,
+            priority: task.priority,
+            status: "todo",
+            assignee_ids: task.assignee_ids,
+            link: task.link,
+            client_id: task.client_id,
+            lead_id: task.lead_id,
+            parent_id: null,
+            recurrence: task.recurrence,
+            recurrence_until: task.recurrence_until,
+            recurrence_parent_id: task.recurrence_parent_id ?? task.id,
+            estimate_minutes: task.estimate_minutes,
+          })
+          .select()
+          .single()
+        if (next.error) {
+          console.warn(`updateTask.recurrence: ${next.error.message}`)
+        } else if (next.data) {
+          logActivity({
+            kind: "task_recurrence_generated",
+            message: `Next instance scheduled — ${task.title} (${nextDue})`,
+            lead_id: task.lead_id,
+            client_id: task.client_id,
+            partner_id: null,
+            task_id: (next.data as Task).id,
+            actor_id: null,
+          })
+        }
+      }
+    }
+    return task
   },
   async deleteTask(id) {
     // events.task_id has ON DELETE SET NULL (migration 014), so any paired
     // event survives with task_id cleared automatically.
+    // tasks.parent_id ON DELETE CASCADE (migration 018) drops subtasks.
+    // task_time_entries.task_id ON DELETE CASCADE drops timer sessions.
     const r = await db().from("tasks").delete().eq("id", id)
     if (r.error) throw new Error(`Supabase: deleteTask — ${r.error.message}`)
+  },
+
+  // ── time tracking ────────────────────────────────────────────────────────
+  async startTimer(input) {
+    // Pre-check the one-open-per-user invariant. The partial unique index
+    // would also reject the insert, but a friendly error beats a Postgres
+    // constraint-violation toast.
+    if (input.userId) {
+      const open = await db()
+        .from("task_time_entries")
+        .select("id, task_id")
+        .eq("user_id", input.userId)
+        .is("ended_at", null)
+        .maybeSingle()
+      if (open.data) {
+        const t = await db()
+          .from("tasks")
+          .select("title")
+          .eq("id", open.data.task_id)
+          .maybeSingle()
+        throw new Error(
+          `Timer already running on "${t.data?.title ?? "another task"}". Stop it first.`
+        )
+      }
+    }
+    const r = await db()
+      .from("task_time_entries")
+      .insert({
+        task_id: input.taskId,
+        user_id: input.userId,
+      })
+      .select()
+      .single()
+    const entry = unwrap(r, "startTimer") as TaskTimeEntry
+    const t = await db().from("tasks").select("title, lead_id, client_id").eq("id", input.taskId).maybeSingle()
+    logActivity({
+      kind: "task_timer_started",
+      message: `Timer started — ${t.data?.title ?? "task"}`,
+      lead_id: t.data?.lead_id ?? null,
+      client_id: t.data?.client_id ?? null,
+      partner_id: null,
+      task_id: input.taskId,
+      actor_id: input.userId,
+    })
+    return entry
+  },
+  async stopTimer(input) {
+    const lookup = await db()
+      .from("task_time_entries")
+      .select("*")
+      .eq("id", input.entryId)
+      .maybeSingle()
+    if (lookup.error) throw new Error(`Supabase: stopTimer.lookup — ${lookup.error.message}`)
+    const entry = lookup.data as TaskTimeEntry | null
+    if (!entry) throw new Error("stopTimer: entry not found")
+    if (entry.ended_at) return entry
+    const endedAtMs = Date.now()
+    const startedAtMs = new Date(entry.started_at).getTime()
+    const duration_seconds = Math.max(0, Math.floor((endedAtMs - startedAtMs) / 1000))
+    const upd = await db()
+      .from("task_time_entries")
+      .update({
+        ended_at: new Date(endedAtMs).toISOString(),
+        duration_seconds,
+        note: input.note ?? entry.note ?? null,
+      })
+      .eq("id", input.entryId)
+      .select()
+      .single()
+    if (upd.error) throw new Error(`Supabase: stopTimer.update — ${upd.error.message}`)
+    // Bump the denormalised counter. Read-then-write race risk on a 3-person
+    // workspace is acceptable; PG could express this as a single UPDATE with
+    // SET tracked_minutes = tracked_minutes + N but the typed client API
+    // doesn't expose expression-style updates cleanly.
+    const minutes = Math.round(duration_seconds / 60)
+    const t = await db()
+      .from("tasks")
+      .select("tracked_minutes, title, lead_id, client_id")
+      .eq("id", entry.task_id)
+      .maybeSingle()
+    if (t.data) {
+      const bumped = (t.data.tracked_minutes ?? 0) + minutes
+      await db()
+        .from("tasks")
+        .update({ tracked_minutes: bumped })
+        .eq("id", entry.task_id)
+      logActivity({
+        kind: "task_timer_stopped",
+        message: `Timer stopped — ${t.data.title}`,
+        lead_id: t.data.lead_id ?? null,
+        client_id: t.data.client_id ?? null,
+        partner_id: null,
+        task_id: entry.task_id,
+        actor_id: entry.user_id,
+      })
+    }
+    return upd.data as TaskTimeEntry
+  },
+  async openTimerFor(userId) {
+    if (!userId) return null
+    const r = await db()
+      .from("task_time_entries")
+      .select("*")
+      .eq("user_id", userId)
+      .is("ended_at", null)
+      .maybeSingle()
+    if (r.error) throw new Error(`Supabase: openTimerFor — ${r.error.message}`)
+    return (r.data ?? null) as TaskTimeEntry | null
+  },
+  async timeEntriesFor(taskId) {
+    const r = await db()
+      .from("task_time_entries")
+      .select("*")
+      .eq("task_id", taskId)
+      .order("started_at", { ascending: false })
+    return unwrap(r, "timeEntriesFor") as TaskTimeEntry[]
   },
 
   // ── events ───────────────────────────────────────────────────────────────
