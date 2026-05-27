@@ -22,6 +22,7 @@ type Form = {
   mrr: string
   contract_start: string
   contract_end: string
+  renewal: string
   notes: string
 }
 
@@ -33,6 +34,7 @@ const EMPTY: Form = {
   mrr: "",
   contract_start: "",
   contract_end: "",
+  renewal: "",
   notes: "",
 }
 
@@ -65,7 +67,9 @@ export function AddClientDialog({
         contact_email: form.email.trim() || null,
         contact_phone: form.phone.trim() || null,
         mrr: Number(form.mrr) || 0,
-        started_at: form.contract_start || null,
+        contract_start_date: form.contract_start || null,
+        contract_end_date: form.contract_end || null,
+        renewal_date: form.renewal || null,
         notes: form.notes.trim() || null,
       },
       {
@@ -125,7 +129,7 @@ export function AddClientDialog({
               placeholder="0"
             />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <Field label="Contract start">
               <Input
                 type="date"
@@ -138,6 +142,13 @@ export function AddClientDialog({
                 type="date"
                 value={form.contract_end}
                 onChange={(e) => set("contract_end", e.target.value)}
+              />
+            </Field>
+            <Field label="Next renewal">
+              <Input
+                type="date"
+                value={form.renewal}
+                onChange={(e) => set("renewal", e.target.value)}
               />
             </Field>
           </div>

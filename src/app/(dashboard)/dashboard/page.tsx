@@ -4,6 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import {
   ArrowUpRight,
+  CalendarClock,
   CalendarPlus,
   CheckCircle2,
   Clock,
@@ -149,6 +150,26 @@ export default function DashboardHome() {
         .slice(0, 5),
     [events, nowMs]
   )
+
+  // Renewals widget — clients with renewal_date inside a [today, today+60d]
+  // window. Overdue renewals (date in the past) are intentionally excluded so
+  // the widget stays forward-looking; the clients table is where you spot
+  // stale renewals via the destructive-red cell.
+  const upcomingRenewals = React.useMemo(() => {
+    const today = todayISO
+    const horizon = new Date()
+    horizon.setDate(horizon.getDate() + 60)
+    const horizonISO = horizon.toISOString().slice(0, 10)
+    return clients
+      .filter(
+        (c) =>
+          c.renewal_date &&
+          c.renewal_date >= today &&
+          c.renewal_date <= horizonISO
+      )
+      .sort((a, b) => (a.renewal_date ?? "").localeCompare(b.renewal_date ?? ""))
+      .slice(0, 5)
+  }, [clients, todayISO])
 
   const greeting = React.useMemo(() => {
     const h = new Date().getHours()
@@ -348,6 +369,58 @@ export default function DashboardHome() {
                       </div>
                     </li>
                   ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* ── Upcoming renewals ──────────────────────────────────────────── */}
+        <section style={{ animationDelay: "210ms" }}>
+          <Card>
+            <CardHeader>
+              <CardTitle>Upcoming renewals</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {upcomingRenewals.length === 0 ? (
+                <EmptyState
+                  size="sm"
+                  icon={<CalendarClock className="size-4" />}
+                  title="No renewals in the next 60 days"
+                  description="Add a renewal date on a client to see them here."
+                />
+              ) : (
+                <ul className="divide-y divide-border-subtle">
+                  {upcomingRenewals.map((c) => {
+                    const days = Math.round(
+                      (new Date(c.renewal_date as string).getTime() - nowMs) /
+                        (24 * 60 * 60 * 1000)
+                    )
+                    return (
+                      <li key={c.id} className="py-2.5">
+                        <Link
+                          href={`/clients/${c.id}`}
+                          className="-mx-2 flex items-center justify-between gap-3 rounded-md px-2 py-1 transition-colors hover:bg-surface-3"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-text-primary">
+                              {c.name}
+                            </p>
+                            <p className="text-[11px] font-medium text-text-tertiary">
+                              {c.renewal_date} · in {days} day
+                              {days === 1 ? "" : "s"}
+                            </p>
+                          </div>
+                          <span className="shrink-0 font-mono tabular-nums text-text-primary">
+                            {money(Number(c.mrr || 0))}
+                            <span className="ml-0.5 text-[10px] font-medium text-text-tertiary">
+                              /mo
+                            </span>
+                          </span>
+                        </Link>
+                      </li>
+                    )
+                  })}
                 </ul>
               )}
             </CardContent>

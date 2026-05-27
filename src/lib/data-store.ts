@@ -9,6 +9,7 @@ import {
   SEED_ACTIVITIES,
   SEED_CLIENTS,
   SEED_CLIENT_PARTNERS,
+  SEED_CONTACTS,
   SEED_EVENTS,
   SEED_LEADS,
   SEED_NOTES,
@@ -23,6 +24,7 @@ import type {
   ActivityKind,
   Client,
   ClientPartner,
+  Contact,
   Event,
   Lead,
   Note,
@@ -40,6 +42,7 @@ const KEY = "viddix-ops:v7"
 type DB = {
   profiles: Profile[]
   clients: Client[]
+  contacts: Contact[]
   leads: Lead[]
   tasks: Task[]
   events: Event[]
@@ -52,6 +55,7 @@ type DB = {
 const seed = (): DB => ({
   profiles: structuredClone(SEED_PROFILES),
   clients: structuredClone(SEED_CLIENTS),
+  contacts: structuredClone(SEED_CONTACTS),
   leads: structuredClone(SEED_LEADS),
   tasks: structuredClone(SEED_TASKS),
   events: structuredClone(SEED_EVENTS),
@@ -78,7 +82,13 @@ function read(): DB {
       // Pin profiles to fresh seed data so newly added fields (role
       // tweaks) reach existing installs without forcing a hard reset.
       profiles:        fresh.profiles,
-      clients:         parsed.clients         ?? fresh.clients,
+      clients:         (parsed.clients ?? fresh.clients).map((c) => ({
+        ...c,
+        // Migration 015 fields — default to null for legacy payloads.
+        contract_start_date: c.contract_start_date ?? null,
+        contract_end_date:   c.contract_end_date   ?? null,
+        renewal_date:        c.renewal_date        ?? null,
+      })),
       leads:           (parsed.leads ?? fresh.leads).map((l) => ({
         ...l,
         temperature: l.temperature ?? "warm",
@@ -111,6 +121,7 @@ function read(): DB {
         task_id: e.task_id ?? null,
       })),
       notes:           parsed.notes           ?? fresh.notes,
+      contacts:        parsed.contacts        ?? fresh.contacts,
       partners:        parsed.partners        ?? fresh.partners,
       client_partners: parsed.client_partners ?? fresh.client_partners,
       activities:      parsed.activities      ?? fresh.activities,
@@ -363,6 +374,9 @@ const localStore = {
       website: lead.website,
       notes: lead.notes,
       started_at: new Date().toISOString().slice(0, 10),
+      contract_start_date: null,
+      contract_end_date:   null,
+      renewal_date:        null,
       owner_id: lead.owner_id,
       created_at: now(),
       updated_at: now(),
@@ -411,6 +425,9 @@ const localStore = {
       website: input.website ?? null,
       notes: input.notes ?? null,
       started_at: input.started_at ?? new Date().toISOString().slice(0, 10),
+      contract_start_date: input.contract_start_date ?? null,
+      contract_end_date:   input.contract_end_date   ?? null,
+      renewal_date:        input.renewal_date        ?? null,
       owner_id: input.owner_id ?? null,
       created_at: now(),
       updated_at: now(),
@@ -445,6 +462,7 @@ const localStore = {
     //   leads.converted_client_id ON DELETE SET NULL → null out
     db.clients = db.clients.filter((x) => x.id !== id)
     db.client_partners = db.client_partners.filter((cp) => cp.client_id !== id)
+    db.contacts = db.contacts.filter((ct) => ct.client_id !== id)
     db.notes = db.notes.filter((n) => n.client_id !== id)
     db.tasks = db.tasks.map((t) =>
       t.client_id === id ? { ...t, client_id: null } : t
@@ -456,6 +474,102 @@ const localStore = {
       l.converted_client_id === id ? { ...l, converted_client_id: null } : l
     )
     record(db, "client_deleted", `${c.name} deleted`, { client_id: id })
+    write(db)
+  },
+
+  // ── contacts ─────────────────────────────────────────────────────────────
+  contacts(): Contact[] {
+    return read().contacts
+  },
+  contactsFor(clientId: string): Contact[] {
+    return read().contacts.filter((c) => c.client_id === clientId)
+  },
+
+  createContact(input: Partial<Contact> & { client_id: string; full_name: string }): Contact {
+    const db = read()
+    const c: Contact = {
+      id: uid(),
+      client_id: input.client_id,
+      full_name: input.full_name,
+      email: input.email ?? null,
+      phone: input.phone ?? null,
+      role: input.role ?? "other",
+      title: input.title ?? null,
+      is_primary: input.is_primary ?? false,
+      notes: input.notes ?? null,
+      created_at: now(),
+      updated_at: now(),
+    }
+    // Enforce the partial-unique-index invariant locally: at most one primary
+    // per client. If the new contact is primary, demote the previous one.
+    if (c.is_primary) {
+      for (const other of db.contacts) {
+        if (other.client_id === c.client_id && other.is_primary) {
+          other.is_primary = false
+          other.updated_at = now()
+        }
+      }
+    }
+    db.contacts.push(c)
+    const client = db.clients.find((cl) => cl.id === c.client_id)
+    record(
+      db,
+      "contact_created",
+      `${c.full_name} added to ${client?.name ?? "client"}`,
+      { client_id: c.client_id }
+    )
+    write(db)
+    return c
+  },
+
+  updateContact(id: string, patch: Partial<Contact>): Contact | null {
+    const db = read()
+    const c = db.contacts.find((x) => x.id === id)
+    if (!c) return null
+    // If is_primary is being set to true, demote any current primary on the
+    // same client before assigning. Mirrors the unique partial index in SQL.
+    if (patch.is_primary === true && !c.is_primary) {
+      for (const other of db.contacts) {
+        if (other.client_id === c.client_id && other.id !== c.id && other.is_primary) {
+          other.is_primary = false
+          other.updated_at = now()
+        }
+      }
+    }
+    Object.assign(c, patch, { updated_at: now() })
+    record(db, "contact_updated", `${c.full_name} updated`, { client_id: c.client_id })
+    write(db)
+    return c
+  },
+
+  deleteContact(id: string) {
+    const db = read()
+    const c = db.contacts.find((x) => x.id === id)
+    db.contacts = db.contacts.filter((x) => x.id !== id)
+    if (c) {
+      record(db, "contact_deleted", `${c.full_name} removed`, { client_id: c.client_id })
+    }
+    write(db)
+  },
+
+  setPrimaryContact(clientId: string, contactId: string) {
+    const db = read()
+    const target = db.contacts.find((c) => c.id === contactId)
+    if (!target || target.client_id !== clientId) return
+    for (const c of db.contacts) {
+      if (c.client_id !== clientId) continue
+      const wantsPrimary = c.id === contactId
+      if (c.is_primary !== wantsPrimary) {
+        c.is_primary = wantsPrimary
+        c.updated_at = now()
+      }
+    }
+    record(
+      db,
+      "contact_set_primary",
+      `${target.full_name} marked as primary`,
+      { client_id: clientId }
+    )
     write(db)
   },
 

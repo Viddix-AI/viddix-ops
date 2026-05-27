@@ -12,6 +12,7 @@ import type {
   Activity,
   Client,
   ClientPartner,
+  Contact,
   Event,
   Lead,
   Note,
@@ -99,6 +100,9 @@ async function ensureClientForWonLead(lead: Lead): Promise<Client> {
       website: lead.website,
       notes: lead.notes,
       started_at: new Date().toISOString().slice(0, 10),
+      contract_start_date: null,
+      contract_end_date:   null,
+      renewal_date:        null,
       owner_id: lead.owner_id,
     })
     .select()
@@ -350,6 +354,9 @@ export const supabaseBackend: Backend = {
         website: input.website ?? null,
         notes: input.notes ?? null,
         started_at: input.started_at ?? new Date().toISOString().slice(0, 10),
+        contract_start_date: input.contract_start_date ?? null,
+        contract_end_date:   input.contract_end_date   ?? null,
+        renewal_date:        input.renewal_date        ?? null,
         owner_id: input.owner_id ?? null,
       })
       .select()
@@ -381,6 +388,148 @@ export const supabaseBackend: Backend = {
       message: "Client deleted",
       lead_id: null,
       client_id: id,
+      partner_id: null,
+      task_id: null,
+      actor_id: null,
+    })
+  },
+
+  // ── contacts ─────────────────────────────────────────────────────────────
+  async contacts() {
+    const r = await db()
+      .from("contacts")
+      .select("*")
+      .order("is_primary", { ascending: false })
+      .order("full_name")
+    return unwrap(r, "contacts") as Contact[]
+  },
+  async contactsFor(clientId) {
+    const r = await db()
+      .from("contacts")
+      .select("*")
+      .eq("client_id", clientId)
+      .order("is_primary", { ascending: false })
+      .order("full_name")
+    return unwrap(r, "contactsFor") as Contact[]
+  },
+  async createContact(input) {
+    // If the caller asked for is_primary=true, demote any existing primary on
+    // the same client first so the partial unique index doesn't conflict.
+    if (input.is_primary) {
+      const demote = await db()
+        .from("contacts")
+        .update({ is_primary: false })
+        .eq("client_id", input.client_id)
+        .eq("is_primary", true)
+      if (demote.error) throw new Error(`Supabase: createContact.demote — ${demote.error.message}`)
+    }
+    const r = await db()
+      .from("contacts")
+      .insert({
+        client_id: input.client_id,
+        full_name: input.full_name,
+        email: input.email ?? null,
+        phone: input.phone ?? null,
+        role: input.role ?? "other",
+        title: input.title ?? null,
+        is_primary: input.is_primary ?? false,
+        notes: input.notes ?? null,
+      })
+      .select()
+      .single()
+    const c = unwrap(r, "createContact") as Contact
+    logActivity({
+      kind: "contact_created",
+      message: `${c.full_name} added`,
+      lead_id: null,
+      client_id: c.client_id,
+      partner_id: null,
+      task_id: null,
+      actor_id: null,
+    })
+    return c
+  },
+  async updateContact(id, patch) {
+    if (patch.is_primary === true) {
+      // Look up the client_id so we can demote any other primary for that
+      // client before the update lands.
+      const lookup = await db()
+        .from("contacts")
+        .select("client_id, is_primary")
+        .eq("id", id)
+        .maybeSingle()
+      if (lookup.error) throw new Error(`Supabase: updateContact.lookup — ${lookup.error.message}`)
+      if (lookup.data && !lookup.data.is_primary) {
+        const demote = await db()
+          .from("contacts")
+          .update({ is_primary: false })
+          .eq("client_id", lookup.data.client_id)
+          .eq("is_primary", true)
+          .neq("id", id)
+        if (demote.error) throw new Error(`Supabase: updateContact.demote — ${demote.error.message}`)
+      }
+    }
+    const r = await db().from("contacts").update(patch).eq("id", id).select().single()
+    if (r.error) throw new Error(`Supabase: updateContact — ${r.error.message}`)
+    const c = r.data as Contact
+    logActivity({
+      kind: "contact_updated",
+      message: `${c.full_name} updated`,
+      lead_id: null,
+      client_id: c.client_id,
+      partner_id: null,
+      task_id: null,
+      actor_id: null,
+    })
+    return c
+  },
+  async deleteContact(id) {
+    const lookup = await db()
+      .from("contacts")
+      .select("client_id, full_name")
+      .eq("id", id)
+      .maybeSingle()
+    const r = await db().from("contacts").delete().eq("id", id)
+    if (r.error) throw new Error(`Supabase: deleteContact — ${r.error.message}`)
+    if (lookup.data) {
+      logActivity({
+        kind: "contact_deleted",
+        message: `${lookup.data.full_name} removed`,
+        lead_id: null,
+        client_id: lookup.data.client_id,
+        partner_id: null,
+        task_id: null,
+        actor_id: null,
+      })
+    }
+  },
+  async setPrimaryContact(clientId, contactId) {
+    // Two-step: demote the current primary (if any), then promote the target.
+    // Not transactional — if the second call fails we end up with zero
+    // primaries on this client until the next attempt. Acceptable: the UI
+    // surfaces "Set primary" again and the partial unique index would have
+    // blocked any inconsistent intermediate state.
+    const demote = await db()
+      .from("contacts")
+      .update({ is_primary: false })
+      .eq("client_id", clientId)
+      .eq("is_primary", true)
+      .neq("id", contactId)
+    if (demote.error) throw new Error(`Supabase: setPrimaryContact.demote — ${demote.error.message}`)
+    const promote = await db()
+      .from("contacts")
+      .update({ is_primary: true })
+      .eq("id", contactId)
+      .eq("client_id", clientId)
+      .select()
+      .single()
+    if (promote.error) throw new Error(`Supabase: setPrimaryContact.promote — ${promote.error.message}`)
+    const c = promote.data as Contact
+    logActivity({
+      kind: "contact_set_primary",
+      message: `${c.full_name} marked as primary`,
+      lead_id: null,
+      client_id: clientId,
       partner_id: null,
       task_id: null,
       actor_id: null,

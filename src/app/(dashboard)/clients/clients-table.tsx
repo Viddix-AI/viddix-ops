@@ -50,10 +50,22 @@ import type { Client, Profile } from "@/lib/types"
 import { cn } from "@/lib/utils"
 import { AddClientDialog } from "./add-client-dialog"
 
-type SortKey = "name" | "mrr" | "started_at"
+type SortKey = "name" | "mrr" | "started_at" | "renewal_date"
 type Density = "comfortable" | "compact"
 
 const DENSITY_KEY = "viddix:clients-density"
+
+// Tailwind class for the renewal date cell. Anything in the past = destructive
+// red; within 30 days = warning ochre; otherwise default tertiary text.
+function renewalTone(date: string | null): string {
+  if (!date) return "text-text-tertiary"
+  const today = new Date().toISOString().slice(0, 10)
+  if (date < today) return "text-destructive font-semibold"
+  const soon = new Date()
+  soon.setDate(soon.getDate() + 30)
+  if (date <= soon.toISOString().slice(0, 10)) return "text-warning"
+  return "text-text-tertiary"
+}
 
 export function ClientsTable() {
   const router = useRouter()
@@ -105,6 +117,16 @@ export function ClientsTable() {
         const dir = sort.dir === "asc" ? 1 : -1
         if (sort.key === "name") return a.name.localeCompare(b.name) * dir
         if (sort.key === "mrr") return (Number(a.mrr) - Number(b.mrr)) * dir
+        if (sort.key === "renewal_date") {
+          // Nulls always last regardless of direction — undated rows shouldn't
+          // dominate the top of the list when sorting ascending.
+          const av = a.renewal_date ?? ""
+          const bv = b.renewal_date ?? ""
+          if (av === "" && bv === "") return 0
+          if (av === "") return 1
+          if (bv === "") return -1
+          return av.localeCompare(bv) * dir
+        }
         return (a.started_at ?? "").localeCompare(b.started_at ?? "") * dir
       })
   }, [clients, q, sort])
@@ -337,6 +359,13 @@ export function ClientsTable() {
                   >
                     Started
                   </Th>
+                  <Th
+                    onClick={() => toggleSort("renewal_date")}
+                    active={sort.key === "renewal_date"}
+                    dir={sort.dir}
+                  >
+                    Renewal
+                  </Th>
                   <Th className="w-10 pr-2" />
                 </tr>
               </thead>
@@ -470,6 +499,17 @@ function ClientRow({
           className="block font-mono text-[12px] tabular-nums text-text-tertiary"
         >
           {client.started_at ?? "—"}
+        </Link>
+      </Td>
+      <Td className={rowPad}>
+        <Link
+          href={`/clients/${client.id}`}
+          className={cn(
+            "block font-mono text-[12px] tabular-nums",
+            renewalTone(client.renewal_date)
+          )}
+        >
+          {client.renewal_date ?? "—"}
         </Link>
       </Td>
       <Td className={cn("w-10 pr-2", rowPad)}>
@@ -783,6 +823,9 @@ const CLIENT_CSV_HEADERS = [
   "website",
   "mrr",
   "started_at",
+  "contract_start_date",
+  "contract_end_date",
+  "renewal_date",
   "notes",
 ] as const
 
@@ -796,6 +839,9 @@ function exportClientsToCsv(clients: Client[]) {
     c.website,
     c.mrr,
     c.started_at,
+    c.contract_start_date,
+    c.contract_end_date,
+    c.renewal_date,
     c.notes,
   ])
   const csv = toCsv([...CLIENT_CSV_HEADERS], rows)
@@ -822,6 +868,9 @@ async function importClientsFromCsv(
       website: r.website?.trim() || null,
       mrr: Number(r.mrr || 0) || 0,
       started_at: r.started_at?.trim() || null,
+      contract_start_date: r.contract_start_date?.trim() || null,
+      contract_end_date: r.contract_end_date?.trim() || null,
+      renewal_date: r.renewal_date?.trim() || null,
       notes: r.notes?.trim() || null,
     })
     imported++

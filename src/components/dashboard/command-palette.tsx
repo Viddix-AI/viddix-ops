@@ -11,11 +11,13 @@ import {
   Handshake,
   Search,
   Sparkles,
+  UserPlus,
 } from "lucide-react"
 
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { NAV_ITEMS } from "@/components/dashboard/sidebar"
 import { useClients } from "@/hooks/use-clients"
+import { useContacts } from "@/hooks/use-contacts"
 import { useLeads } from "@/hooks/use-leads"
 import { usePartners } from "@/hooks/use-partners"
 import { useTasks } from "@/hooks/use-tasks"
@@ -46,6 +48,7 @@ export function CommandPalette({
   const router = useRouter()
   const { data: leads = [] } = useLeads()
   const { data: clients = [] } = useClients()
+  const { data: contacts = [] } = useContacts()
   const { data: partners = [] } = usePartners()
   const { data: tasks = [] } = useTasks()
 
@@ -158,6 +161,30 @@ export function CommandPalette({
                     sub={c.contact_name ?? undefined}
                   />
                 ))}
+              </Group>
+            )}
+
+            {contacts.length > 0 && (
+              <Group heading="Contacts">
+                {contacts.slice(0, 8).map((c) => {
+                  const client = clients.find((cl) => cl.id === c.client_id)
+                  return (
+                    <PaletteItem
+                      key={c.id}
+                      value={`contact ${c.full_name} ${c.email ?? ""} ${c.title ?? ""}`}
+                      onSelect={go(
+                        `/clients/${c.client_id}?tab=contacts&contact=${c.id}`
+                      )}
+                      icon={<UserPlus className="size-4" />}
+                      label={c.full_name}
+                      sub={
+                        client
+                          ? `${client.name}${c.title ? ` · ${c.title}` : ""}`
+                          : c.title ?? undefined
+                      }
+                    />
+                  )
+                })}
               </Group>
             )}
 

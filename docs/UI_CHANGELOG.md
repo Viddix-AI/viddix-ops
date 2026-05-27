@@ -123,6 +123,53 @@ plum → `#8C7CA6`.
 - `src/lib/motion.ts` (new) — `easeOutEditorial` and `dur` presets for
   consistent timings across CSS transitions.
 
+## Features — Renewals & Multi-contact (branch `feat/renewals-contacts`)
+
+**Tranche 1 — Client contract dates + dashboard renewals widget**
+- Migration `015_client_contract_dates.sql` — `contract_start_date`,
+  `contract_end_date`, `renewal_date` columns on `clients` + partial indexes.
+- `src/lib/types.ts`, `src/lib/data-store.ts` healer + `createClient` +
+  `convertLeadToClient`, `src/lib/supabase-backend.ts` (`createClient`,
+  `ensureClientForWonLead`), `src/lib/seed-data.ts` (3 demo clients with
+  varied renewal dates).
+- `src/app/(dashboard)/clients/add-client-dialog.tsx` — three date inputs
+  wired to the new columns (previously `contract_start` overloaded `started_at`).
+- `src/app/(dashboard)/clients/[id]/client-detail.tsx` — `DateField` inline
+  editor in the Overview card.
+- `src/app/(dashboard)/clients/clients-table.tsx` — sortable Renewal column
+  with `text-destructive` for overdue and `text-warning` for ≤30d.
+- `src/app/(dashboard)/dashboard/page.tsx` — `Upcoming renewals` Card listing
+  clients with `renewal_date BETWEEN today AND today+60d` (top 5, oldest first).
+
+**Tranche 2 — Multi-contact per client**
+- Migration `016_client_contacts.sql` — `contacts` table + `contact_role` enum +
+  partial unique index for one primary per client + backfill from
+  `clients.contact_*`.
+- Migration `017_activity_contact_kinds.sql` — extends `activities.kind` CHECK
+  with `contact_created / contact_updated / contact_deleted / contact_set_primary`.
+- `src/lib/types.ts` (`Contact`, `ContactRole`, `ActivityKind` extension,
+  `Database.Tables.contacts`, `Database.Enums.contact_role`).
+- `src/lib/backend.ts` — `contacts() / contactsFor / createContact /
+  updateContact / deleteContact / setPrimaryContact`.
+- `src/lib/data-store.ts` — full dual-backend impl with single-primary
+  invariant enforced at write-time.
+- `src/lib/supabase-backend.ts` — same surface; `setPrimaryContact` is a
+  demote-then-promote pair (two statements; UI retries on partial failure).
+- `src/lib/seed-data.ts` — `SEED_CONTACTS` materialises primary contacts for
+  the two demo clients with contact info.
+- New hook `src/hooks/use-contacts.ts` (`useContacts`, `useContactsFor`,
+  `useCreateContact`, `useUpdateContact`, `useDeleteContact`,
+  `useSetPrimaryContact`).
+- New `src/app/(dashboard)/clients/[id]/add-contact-dialog.tsx` (create + edit).
+- `src/app/(dashboard)/clients/[id]/client-detail.tsx` — Contacts tab between
+  Tasks and Notes, Overview rewires Contact/Email/Phone to primary contact,
+  reads `?tab=contacts&contact=<id>` URL params for deep-linking.
+- `src/components/dashboard/command-palette.tsx` — Contacts group matching
+  `full_name / email / title`, deep-links to the Contacts tab on the client.
+- `src/app/(dashboard)/activity/activity-view.tsx` +
+  `src/app/(dashboard)/dashboard/recent-activity.tsx` — ICON map extended with
+  the new activity kinds.
+
 ## What we did NOT change
 
 - No business logic, hooks, queries, mutations, or `lib/metrics.ts`.

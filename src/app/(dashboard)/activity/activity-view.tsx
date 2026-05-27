@@ -13,7 +13,9 @@ import {
   Plus,
   RotateCcw,
   Sparkles,
+  Star,
   Trash2,
+  UserPlus,
   type LucideIcon,
 } from "lucide-react"
 
@@ -48,6 +50,10 @@ const ICONS: Record<ActivityKind, { icon: LucideIcon; tone: PillTone }> = {
   event_created:    { icon: CheckSquare, tone: "blue" },
   event_updated:    { icon: Pencil,      tone: "slate" },
   demo_reset:       { icon: RotateCcw,   tone: "amber" },
+  contact_created:     { icon: UserPlus,    tone: "emerald" },
+  contact_updated:     { icon: Pencil,      tone: "slate" },
+  contact_deleted:     { icon: Trash2,      tone: "rose" },
+  contact_set_primary: { icon: Star,        tone: "amber" },
 }
 
 const FILTERS: { id: "all" | "leads" | "clients" | "tasks" | "partners"; label: string }[] = [

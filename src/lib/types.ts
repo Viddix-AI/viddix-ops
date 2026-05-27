@@ -1,4 +1,6 @@
 // Database typing — kept in sync with src/supabase/migrations/001_init.sql
+// onwards. Recent additions: 015 (client contract/renewal dates), 016
+// (multi-contact per client), 017 (contact activity kinds).
 export type LeadStage =
   | "new"
   | "contacted"
@@ -36,6 +38,14 @@ export type Client = {
   website: string | null
   notes: string | null
   started_at: string | null
+  // Contract window. `contract_start_date` is the formal contract start (may
+  // post-date `started_at` if there was a free trial); `contract_end_date` is
+  // when the current contract expires. `renewal_date` is the next renewal
+  // checkpoint — surfaced on the dashboard "Upcoming renewals" widget and
+  // highlighted in the clients table when within 30 days or overdue.
+  contract_start_date: string | null
+  contract_end_date:   string | null
+  renewal_date:        string | null
   owner_id: string | null
   created_at: string
   updated_at: string
@@ -107,6 +117,10 @@ export type ActivityKind =
   | "event_created"
   | "event_updated"
   | "demo_reset"
+  | "contact_created"
+  | "contact_updated"
+  | "contact_deleted"
+  | "contact_set_primary"
 
 export type Activity = {
   id: string
@@ -166,6 +180,28 @@ export type Event = {
   created_at: string
 }
 
+export type ContactRole =
+  | "primary"
+  | "champion"
+  | "decision_maker"
+  | "influencer"
+  | "blocker"
+  | "other"
+
+export type Contact = {
+  id: string
+  client_id: string
+  full_name: string
+  email: string | null
+  phone: string | null
+  role: ContactRole
+  title: string | null
+  is_primary: boolean
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
 export type Note = {
   id: string
   content: string
@@ -197,6 +233,7 @@ export type Database = {
     Tables: {
       profiles:        Row<Profile>
       clients:         Row<Client>
+      contacts:        Row<Contact>
       leads:           Row<Lead>
       tasks:           Row<Task>
       events:          Row<Event>
@@ -213,6 +250,7 @@ export type Database = {
       task_priority: TaskPriority
       event_type: EventType
       lead_temperature: LeadTemperature
+      contact_role: ContactRole
     }
   }
 }

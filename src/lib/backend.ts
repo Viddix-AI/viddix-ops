@@ -7,6 +7,7 @@ import type {
   Activity,
   Client,
   ClientPartner,
+  Contact,
   Event,
   Lead,
   Note,
@@ -47,6 +48,14 @@ export interface Backend {
   createClient(input: Partial<Client> & { name: string }): Promise<Client>
   updateClient(id: string, patch: Partial<Client>):        Promise<Client | null>
   deleteClient(id: string):                                Promise<void>
+
+  // Contacts (multi-contact per client; primary contact mirrors to clients.contact_*)
+  contacts(): Promise<Contact[]>
+  contactsFor(clientId: string): Promise<Contact[]>
+  createContact(input: Partial<Contact> & { client_id: string; full_name: string }): Promise<Contact>
+  updateContact(id: string, patch: Partial<Contact>): Promise<Contact | null>
+  deleteContact(id: string): Promise<void>
+  setPrimaryContact(clientId: string, contactId: string): Promise<void>
 
   // Tasks
   createTask(input: Partial<Task> & { title: string }): Promise<Task>

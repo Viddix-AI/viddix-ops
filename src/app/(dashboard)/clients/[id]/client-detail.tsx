@@ -2,12 +2,24 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { ArrowLeft, Mail, Phone, Globe, Plus, Trash2 } from "lucide-react"
+import { useSearchParams } from "next/navigation"
+import {
+  ArrowLeft,
+  Mail,
+  Phone,
+  Globe,
+  Pencil,
+  Plus,
+  Star,
+  Trash2,
+  UserPlus,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Pill } from "@/components/ui/pill"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs"
@@ -24,6 +36,11 @@ import { PageHeader } from "@/components/dashboard/page-header"
 import { SendBookingLinkButton } from "@/components/dashboard/send-booking-link-button"
 import { UserAvatar } from "@/components/dashboard/user-avatar"
 import { useClient, useUpdateClient } from "@/hooks/use-clients"
+import {
+  useContactsFor,
+  useDeleteContact,
+  useSetPrimaryContact,
+} from "@/hooks/use-contacts"
 import { useEvents } from "@/hooks/use-events"
 import { useCreateNote, useNotesFor } from "@/hooks/use-notes"
 import {
@@ -36,6 +53,8 @@ import {
 import { useCurrentProfile, useProfiles } from "@/hooks/use-profile"
 import { useCreateTask, useTasks } from "@/hooks/use-tasks"
 import { money, relativeDay } from "@/lib/format"
+import type { Contact, ContactRole } from "@/lib/types"
+import { AddContactDialog } from "./add-contact-dialog"
 
 export function ClientDetail({ id }: { id: string }) {
   const { data: client } = useClient(id)
@@ -45,6 +64,25 @@ export function ClientDetail({ id }: { id: string }) {
   const { data: tasks = [] } = useTasks()
   const { data: events = [] } = useEvents()
   const { data: notes = [] } = useNotesFor({ clientId: id })
+  const { data: contacts = [] } = useContactsFor(id)
+
+  // Tab + contact deep-link via query params (?tab=contacts&contact=<id>).
+  // store-info-from-previous-renders pattern keeps the tab state in sync with
+  // the URL without a useEffect; users can still click between tabs locally.
+  const search = useSearchParams()
+  const urlTab = search.get("tab") ?? "tasks"
+  const highlightContactId = search.get("contact")
+  const [tab, setTab] = React.useState<string>(urlTab)
+  const [prevUrlTab, setPrevUrlTab] = React.useState(urlTab)
+  if (urlTab !== prevUrlTab) {
+    setPrevUrlTab(urlTab)
+    setTab(urlTab)
+  }
+
+  // Primary contact for the Overview card. Falls back to first contact if no
+  // row is flagged primary (shouldn't happen post-migration, but defensive).
+  const primaryContact =
+    contacts.find((c) => c.is_primary) ?? contacts[0] ?? null
 
   if (!client) {
     return (
@@ -94,12 +132,44 @@ export function ClientDetail({ id }: { id: string }) {
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 sm:grid-cols-2">
-                <ContactRow icon={<Mail className="size-3.5" />} label="Email" value={client.contact_email} />
-                <ContactRow icon={<Phone className="size-3.5" />} label="Phone" value={client.contact_phone} />
-                <ContactRow icon={<Globe className="size-3.5" />} label="Website" value={client.website} />
                 <ContactRow label="Industry" value={client.industry} />
                 <ContactRow label="Started" value={client.started_at} />
-                <ContactRow label="Contact" value={client.contact_name} />
+                <DateField
+                  label="Contract start"
+                  value={client.contract_start_date}
+                  onSave={(v) =>
+                    update.mutate({ id: client.id, patch: { contract_start_date: v } })
+                  }
+                />
+                <DateField
+                  label="Contract end"
+                  value={client.contract_end_date}
+                  onSave={(v) =>
+                    update.mutate({ id: client.id, patch: { contract_end_date: v } })
+                  }
+                />
+                <DateField
+                  label="Next renewal"
+                  value={client.renewal_date}
+                  onSave={(v) =>
+                    update.mutate({ id: client.id, patch: { renewal_date: v } })
+                  }
+                />
+                <ContactRow
+                  label="Contact"
+                  value={primaryContact?.full_name ?? client.contact_name}
+                />
+                <ContactRow
+                  icon={<Mail className="size-3.5" />}
+                  label="Email"
+                  value={primaryContact?.email ?? client.contact_email}
+                />
+                <ContactRow
+                  icon={<Phone className="size-3.5" />}
+                  label="Phone"
+                  value={primaryContact?.phone ?? client.contact_phone}
+                />
+                <ContactRow icon={<Globe className="size-3.5" />} label="Website" value={client.website} />
               </div>
               {client.notes && (
                 <p className="mt-4 rounded-md bg-muted/50 p-3 text-sm text-foreground/80">
@@ -162,9 +232,10 @@ export function ClientDetail({ id }: { id: string }) {
           </Card>
         </section>
 
-        <Tabs defaultValue="tasks">
+        <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
           <TabsList className="bg-muted">
             <TabsTrigger value="tasks">Tasks · {clientTasks.length}</TabsTrigger>
+            <TabsTrigger value="contacts">Contacts · {contacts.length}</TabsTrigger>
             <TabsTrigger value="notes">Notes · {notes.length}</TabsTrigger>
             <TabsTrigger value="events">Events · {clientEvents.length}</TabsTrigger>
             <TabsTrigger value="partners">Partners</TabsTrigger>
@@ -175,6 +246,13 @@ export function ClientDetail({ id }: { id: string }) {
               clientId={client.id}
               tasks={clientTasks}
               ownerId={client.owner_id ?? me.id}
+            />
+          </TabsPrimitive.Panel>
+          <TabsPrimitive.Panel value="contacts" className="mt-4">
+            <ContactsTab
+              clientId={client.id}
+              contacts={contacts}
+              highlightId={highlightContactId}
             />
           </TabsPrimitive.Panel>
           <TabsPrimitive.Panel value="notes" className="mt-4">
@@ -209,6 +287,70 @@ function ContactRow({
           {label}
         </p>
         <p className="truncate">{value ?? "—"}</p>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Inline date editor used in the Overview card. Renders the formatted value
+ * as compact text; clicking flips to a native <input type="date"> that calls
+ * `onSave` on blur if the value actually changed. The local edit buffer
+ * follows the "store-info-from-previous-renders" pattern so it stays in sync
+ * with upstream updates without a useEffect.
+ */
+function DateField({
+  label,
+  value,
+  onSave,
+}: {
+  label: string
+  value: string | null
+  onSave: (v: string | null) => void
+}) {
+  const [editing, setEditing] = React.useState(false)
+  const [prev, setPrev] = React.useState(value)
+  const [v, setV] = React.useState(value ?? "")
+  if (prev !== value) {
+    setPrev(value)
+    setV(value ?? "")
+  }
+  const commit = () => {
+    setEditing(false)
+    const next = v || null
+    if (next !== value) onSave(next)
+  }
+  return (
+    <div className="flex items-start gap-2 text-sm">
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          {label}
+        </p>
+        {editing ? (
+          <Input
+            type="date"
+            autoFocus
+            value={v}
+            onChange={(e) => setV(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commit()
+              if (e.key === "Escape") {
+                setV(value ?? "")
+                setEditing(false)
+              }
+            }}
+            className="h-7 text-sm"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="-mx-1 truncate rounded px-1 text-left text-foreground hover:bg-muted/60"
+          >
+            {value ?? "—"}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -297,6 +439,202 @@ function TasksTab({
         ) : (
           <EmptyState title="No tasks" description="Add the first task for this client." />
         )}
+      </CardContent>
+    </Card>
+  )
+}
+
+const ROLE_TONE: Record<ContactRole, "emerald" | "indigo" | "violet" | "amber" | "rose" | "slate"> = {
+  primary:        "emerald",
+  champion:       "indigo",
+  decision_maker: "violet",
+  influencer:     "amber",
+  blocker:        "rose",
+  other:          "slate",
+}
+
+const ROLE_LABEL: Record<ContactRole, string> = {
+  primary:        "Primary",
+  champion:       "Champion",
+  decision_maker: "Decision maker",
+  influencer:     "Influencer",
+  blocker:        "Blocker",
+  other:          "Other",
+}
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? "")
+    .join("") || "?"
+}
+
+function ContactsTab({
+  clientId,
+  contacts,
+  highlightId,
+}: {
+  clientId: string
+  contacts: Contact[]
+  highlightId: string | null
+}) {
+  const [addOpen, setAddOpen] = React.useState(false)
+  const [editing, setEditing] = React.useState<Contact | null>(null)
+  const setPrimary = useSetPrimaryContact()
+  const remove = useDeleteContact()
+  const hasPrimary = contacts.some((c) => c.is_primary)
+
+  return (
+    <Card>
+      <CardContent className="space-y-3 py-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs font-medium text-foreground/70">
+            {contacts.length} contact{contacts.length === 1 ? "" : "s"} ·{" "}
+            {hasPrimary ? "1 primary" : "no primary"}
+          </p>
+          <Button size="sm" onClick={() => setAddOpen(true)}>
+            <Plus />
+            Add contact
+          </Button>
+        </div>
+
+        {contacts.length === 0 ? (
+          <EmptyState
+            icon={<UserPlus className="size-4" />}
+            title="No contacts yet"
+            description="Add the first contact to track who you talk to at this account."
+            action={
+              <Button size="sm" onClick={() => setAddOpen(true)}>
+                <Plus />
+                Add contact
+              </Button>
+            }
+          />
+        ) : (
+          <ul className="divide-y divide-border rounded-md border border-border">
+            {contacts.map((c) => {
+              const isHighlighted = c.id === highlightId
+              return (
+                <li
+                  key={c.id}
+                  className={`flex flex-wrap items-center gap-3 px-3 py-2.5 text-sm ${
+                    isHighlighted ? "bg-accent/40" : ""
+                  }`}
+                >
+                  <div className="grid size-9 shrink-0 place-items-center rounded-full bg-surface-3 text-xs font-medium text-text-secondary">
+                    {initials(c.full_name)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="truncate font-medium text-text-primary">
+                        {c.full_name}
+                      </span>
+                      <Pill tone={ROLE_TONE[c.role]} size="sm" uppercase>
+                        {ROLE_LABEL[c.role]}
+                      </Pill>
+                      {c.is_primary && (
+                        <Pill variant="success" size="sm" uppercase>
+                          <Star className="size-2.5" />
+                          Primary
+                        </Pill>
+                      )}
+                    </div>
+                    {c.title && (
+                      <p className="truncate text-xs text-text-tertiary">
+                        {c.title}
+                      </p>
+                    )}
+                    <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-text-tertiary">
+                      {c.email && (
+                        <a
+                          href={`mailto:${c.email}`}
+                          className="inline-flex items-center gap-1 hover:text-foreground"
+                        >
+                          <Mail className="size-3" />
+                          {c.email}
+                        </a>
+                      )}
+                      {c.phone && (
+                        <a
+                          href={`tel:${c.phone}`}
+                          className="inline-flex items-center gap-1 hover:text-foreground"
+                        >
+                          <Phone className="size-3" />
+                          {c.phone}
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {!c.is_primary && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setPrimary.mutate(
+                            { clientId, contactId: c.id },
+                            {
+                              onSuccess: () =>
+                                toast.success(`${c.full_name} set as primary`),
+                            }
+                          )
+                        }
+                      >
+                        <Star />
+                        Set primary
+                      </Button>
+                    )}
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label="Edit contact"
+                      onClick={() => setEditing(c)}
+                    >
+                      <Pencil />
+                    </Button>
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label="Delete contact"
+                      onClick={() => {
+                        if (
+                          !confirm(`Remove ${c.full_name} from this client?`)
+                        ) {
+                          return
+                        }
+                        remove.mutate(
+                          { id: c.id, clientId },
+                          {
+                            onSuccess: () =>
+                              toast.success(`${c.full_name} removed`),
+                          }
+                        )
+                      }}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+
+        <AddContactDialog
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          clientId={clientId}
+          hasExistingPrimary={hasPrimary}
+        />
+        <AddContactDialog
+          open={!!editing}
+          onOpenChange={(o) => !o && setEditing(null)}
+          clientId={clientId}
+          contact={editing}
+          hasExistingPrimary={hasPrimary}
+        />
       </CardContent>
     </Card>
   )
