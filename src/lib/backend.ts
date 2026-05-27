@@ -13,7 +13,9 @@ import type {
   Note,
   Partner,
   Profile,
+  Tag,
   Task,
+  TaskTag,
   TaskTimeEntry,
 } from "@/lib/types"
 
@@ -92,6 +94,17 @@ export interface Backend {
   // Notes
   createNote(input: { content: string; client_id?: string; lead_id?: string; author_id?: string }): Promise<Note>
   deleteNote(id: string): Promise<void>
+
+  // Tags (migration 020) — many-to-many via task_tags. The `tags` table is
+  // entity-agnostic; lead_tags / client_tags can join in later without a
+  // tags-table rename.
+  tags():                                                       Promise<Tag[]>
+  tagsFor(taskId: string):                                      Promise<Tag[]>
+  taskTags():                                                   Promise<TaskTag[]>
+  createTag(input: { name: string; color?: string }):           Promise<Tag>
+  deleteTag(id: string):                                        Promise<void>
+  attachTag(input: { task_id: string; tag_id: string }):        Promise<void>
+  detachTag(input: { task_id: string; tag_id: string }):        Promise<void>
 }
 
 export const SUPABASE_CONFIGURED =

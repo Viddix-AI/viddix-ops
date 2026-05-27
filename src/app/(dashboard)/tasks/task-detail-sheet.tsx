@@ -26,6 +26,13 @@ import { useClients } from "@/hooks/use-clients"
 import { useEvents } from "@/hooks/use-events"
 import { useLeads } from "@/hooks/use-leads"
 import { useCurrentProfile, useProfiles } from "@/hooks/use-profile"
+import {
+  useAttachTag,
+  useCreateTag,
+  useDetachTag,
+  useTags,
+  useTagsFor,
+} from "@/hooks/use-tags"
 import { useCreateTask, useDeleteTask, useTasks, useUpdateTask } from "@/hooks/use-tasks"
 import {
   useOpenTimerFor,
@@ -33,7 +40,8 @@ import {
   useStopTimer,
   useTimeEntriesFor,
 } from "@/hooks/use-time-entries"
-import type { Task, TaskPriority, TaskRecurrence, TaskStatus } from "@/lib/types"
+import type { PillTone } from "@/components/ui/pill"
+import type { Tag, Task, TaskPriority, TaskRecurrence, TaskStatus } from "@/lib/types"
 
 // base-ui's Select can't use "" as a real item value; this sentinel maps to
 // "unlinked" so the user can clear a relation without a separate button.
@@ -361,6 +369,8 @@ export function TaskDetailSheet({
 
           <SubtasksSection task={task} subtasks={tasks.filter((t) => t.parent_id === task.id)} />
 
+          <TagsSection task={task} />
+
           <TimeSection task={task} />
 
           <Field label="Link">
@@ -598,6 +608,141 @@ function SubtasksSection({
           <Plus />
           Add
         </Button>
+      </div>
+    </div>
+  )
+}
+
+const TAG_TONES: PillTone[] = ["slate", "blue", "sky", "indigo", "violet", "emerald", "amber", "rose"]
+const TAG_TONE_SET = new Set<string>(TAG_TONES)
+function toneOf(t: Tag): PillTone {
+  return (TAG_TONE_SET.has(t.color) ? t.color : "slate") as PillTone
+}
+
+function TagsSection({ task }: { task: Task }) {
+  const { data: allTags = [] } = useTags()
+  const { data: attached = [] } = useTagsFor(task.id)
+  const attach = useAttachTag()
+  const detach = useDetachTag()
+  const create = useCreateTag()
+
+  const [input, setInput] = React.useState("")
+  const [open, setOpen] = React.useState(false)
+  const matches = React.useMemo(() => {
+    const attachedIds = new Set(attached.map((t) => t.id))
+    const needle = input.trim().toLowerCase()
+    return allTags
+      .filter((t) => !attachedIds.has(t.id))
+      .filter((t) => !needle || t.name.toLowerCase().includes(needle))
+      .slice(0, 8)
+  }, [allTags, attached, input])
+  const exactMatch = allTags.find(
+    (t) => t.name.toLowerCase() === input.trim().toLowerCase()
+  )
+  const canCreate = input.trim().length > 0 && !exactMatch
+
+  function pick(tagId: string) {
+    attach.mutate({ task_id: task.id, tag_id: tagId })
+    setInput("")
+    setOpen(false)
+  }
+
+  function createAndAttach() {
+    if (!canCreate) return
+    create.mutate(
+      { name: input.trim() },
+      {
+        onSuccess: (tag) => {
+          attach.mutate({ task_id: task.id, tag_id: tag.id })
+          setInput("")
+          setOpen(false)
+        },
+      }
+    )
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
+      <p className="text-xs font-medium text-text-secondary">Tags</p>
+      <div className="flex flex-wrap gap-1.5">
+        {attached.length === 0 && (
+          <span className="text-[11px] text-text-tertiary">No tags yet.</span>
+        )}
+        {attached.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => detach.mutate({ task_id: task.id, tag_id: t.id })}
+            className="group inline-flex items-center"
+            aria-label={`Remove tag ${t.name}`}
+            title={`Remove "${t.name}"`}
+          >
+            <Pill tone={toneOf(t)} size="sm">
+              {t.name}
+              <span className="ml-1 text-current opacity-50 group-hover:opacity-100">
+                ×
+              </span>
+            </Pill>
+          </button>
+        ))}
+      </div>
+      <div className="relative">
+        <Input
+          value={input}
+          onChange={(e) => {
+            setInput(e.target.value)
+            setOpen(true)
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => {
+            // delay so clicking a result still registers
+            window.setTimeout(() => setOpen(false), 120)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault()
+              if (matches[0]) pick(matches[0].id)
+              else if (canCreate) createAndAttach()
+            }
+            if (e.key === "Escape") {
+              setOpen(false)
+              setInput("")
+            }
+          }}
+          placeholder="+ Add tag…"
+          className="h-8 text-sm"
+        />
+        {open && (matches.length > 0 || canCreate) && (
+          <ul className="absolute z-30 mt-1 w-full overflow-hidden rounded-md border border-border bg-card shadow-[var(--shadow-paper-md)]">
+            {matches.map((t) => (
+              <li key={t.id}>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => pick(t.id)}
+                  className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-sm hover:bg-surface-3"
+                >
+                  <Pill tone={toneOf(t)} size="sm">
+                    {t.name}
+                  </Pill>
+                </button>
+              </li>
+            ))}
+            {canCreate && (
+              <li>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={createAndAttach}
+                  className="flex w-full items-center gap-2 border-t border-border-subtle px-2.5 py-1.5 text-left text-sm text-text-secondary hover:bg-surface-3 hover:text-text-primary"
+                >
+                  <Plus className="size-3.5" />
+                  Create tag &ldquo;{input.trim()}&rdquo;
+                </button>
+              </li>
+            )}
+          </ul>
+        )}
       </div>
     </div>
   )

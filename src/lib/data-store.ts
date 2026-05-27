@@ -33,8 +33,10 @@ import type {
   Note,
   Partner,
   Profile,
+  Tag,
   Task,
   TaskRecurrence,
+  TaskTag,
   TaskTimeEntry,
 } from "@/lib/types"
 
@@ -56,6 +58,8 @@ type DB = {
   partners: Partner[]
   client_partners: ClientPartner[]
   activities: Activity[]
+  tags: Tag[]
+  task_tags: TaskTag[]
 }
 
 const seed = (): DB => ({
@@ -70,6 +74,8 @@ const seed = (): DB => ({
   partners: structuredClone(SEED_PARTNERS),
   client_partners: structuredClone(SEED_CLIENT_PARTNERS),
   activities: structuredClone(SEED_ACTIVITIES),
+  tags: [],
+  task_tags: [],
 })
 
 function read(): DB {
@@ -140,6 +146,8 @@ function read(): DB {
       partners:        parsed.partners        ?? fresh.partners,
       client_partners: parsed.client_partners ?? fresh.client_partners,
       activities:      parsed.activities      ?? fresh.activities,
+      tags:            parsed.tags            ?? fresh.tags,
+      task_tags:       parsed.task_tags       ?? fresh.task_tags,
     }
     return healed
   } catch {
@@ -691,6 +699,7 @@ const localStore = {
       e.task_id && doomed.has(e.task_id) ? { ...e, task_id: null } : e
     )
     db.time_entries = db.time_entries.filter((te) => !doomed.has(te.task_id))
+    db.task_tags    = db.task_tags.filter((tt) => !doomed.has(tt.task_id))
     db.tasks = db.tasks.filter((x) => !doomed.has(x.id))
     if (t) {
       record(db, "task_deleted", `Task deleted — ${t.title}`, {
@@ -782,6 +791,67 @@ const localStore = {
     return read()
       .time_entries.filter((e) => e.task_id === taskId)
       .sort((a, b) => b.started_at.localeCompare(a.started_at))
+  },
+
+  // ── tags ─────────────────────────────────────────────────────────────────
+  tags(): Tag[] {
+    return read().tags.slice().sort((a, b) => a.name.localeCompare(b.name))
+  },
+  tagsFor(taskId: string): Tag[] {
+    const db = read()
+    const ids = new Set(
+      db.task_tags.filter((tt) => tt.task_id === taskId).map((tt) => tt.tag_id)
+    )
+    return db.tags
+      .filter((t) => ids.has(t.id))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  },
+  taskTags(): TaskTag[] {
+    return read().task_tags
+  },
+  createTag(input: { name: string; color?: string }): Tag {
+    const db = read()
+    // Unique-by-name parity with the SQL constraint. Returns the existing
+    // row if a tag with this name already exists so the autocomplete-create
+    // path is idempotent.
+    const name = input.name.trim()
+    if (!name) throw new Error("createTag: name required")
+    const existing = db.tags.find((t) => t.name.toLowerCase() === name.toLowerCase())
+    if (existing) return existing
+    const tag: Tag = {
+      id: uid(),
+      name,
+      color: input.color ?? "slate",
+      created_at: now(),
+    }
+    db.tags.push(tag)
+    write(db)
+    return tag
+  },
+  deleteTag(id: string) {
+    const db = read()
+    db.tags = db.tags.filter((t) => t.id !== id)
+    db.task_tags = db.task_tags.filter((tt) => tt.tag_id !== id)
+    write(db)
+  },
+  attachTag(input: { task_id: string; tag_id: string }) {
+    const db = read()
+    if (
+      db.task_tags.some(
+        (tt) => tt.task_id === input.task_id && tt.tag_id === input.tag_id
+      )
+    ) {
+      return
+    }
+    db.task_tags.push({ task_id: input.task_id, tag_id: input.tag_id })
+    write(db)
+  },
+  detachTag(input: { task_id: string; tag_id: string }) {
+    const db = read()
+    db.task_tags = db.task_tags.filter(
+      (tt) => !(tt.task_id === input.task_id && tt.tag_id === input.tag_id)
+    )
+    write(db)
   },
 
   // ── events ───────────────────────────────────────────────────────────────

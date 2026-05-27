@@ -170,6 +170,59 @@ plum → `#8C7CA6`.
   `src/app/(dashboard)/dashboard/recent-activity.tsx` — ICON map extended with
   the new activity kinds.
 
+**Tranche 3 — Refactor buildTaskFromEvent**
+- New `src/lib/build-task-from-event.ts` (no `"use client"`) — shared by
+  `data-store.ts`, `supabase-backend.ts`, and `app/api/webhooks/cal/route.ts`
+  so the Cal.com server route no longer carries an inline duplicate to
+  avoid the server/client boundary.
+
+**Tranche 4 — Subtasks, recurrence, time tracking**
+- Migration `018_tasks_plus.sql` — `tasks.parent_id` (cascade),
+  `task_recurrence` enum + recurrence/recurrence_until/recurrence_parent_id
+  + estimate_minutes + tracked_minutes; new `task_time_entries` table with
+  partial unique index enforcing one open timer per user.
+- Migration `019_activity_task_plus_kinds.sql` — extend CHECK with
+  `task_subtask_added / task_timer_started / task_timer_stopped /
+  task_recurrence_generated`.
+- `src/lib/types.ts` — `Task` gains the migration-018 fields; new
+  `TaskRecurrence` + `TaskTimeEntry`; per-table `Insert` overrides make
+  DB-default columns optional so call sites don't have to spell out
+  `tracked_minutes: 0` etc.
+- `src/lib/data-store.ts` + `src/lib/supabase-backend.ts` — recurrence
+  generation in `updateTask` (date-fns advances daily/weekly/monthly/yearly,
+  honours `recurrence_until`); cascade-cleans subtasks and time entries on
+  delete in the localStorage impl (Postgres handles it via FKs).
+- New hook `src/hooks/use-time-entries.ts`.
+- New `src/components/dashboard/active-timer-banner.tsx` — sticky pill
+  surfaced from `(dashboard)/layout.tsx`, elapsed time in state to satisfy
+  React 19 strict purity.
+- `src/app/(dashboard)/tasks/task-detail-sheet.tsx` — Estimate, Recurrence,
+  Recurrence until, Parent task (cycle-safe + scope-filtered), Subtasks
+  list, Time section (Start/Stop + per-entry log).
+- `src/app/(dashboard)/tasks/tasks-view.tsx` — subtasks excluded from root
+  listing, expand chevron when children exist, recurrence badge,
+  tracked-minutes display next to the title.
+
+**Tranche 5 — Tags + rich tasks-view filters**
+- Migration `020_tags.sql` — entity-agnostic `tags` table + `task_tags`
+  M:N + RLS.
+- `src/lib/types.ts` — `Tag`, `TaskTag`, `Database.Tables.tags` /
+  `task_tags`.
+- `src/lib/backend.ts` + both backends — `tags / tagsFor / taskTags /
+  createTag / deleteTag / attachTag / detachTag`. Supabase uses upserts on
+  the unique name / `(task_id, tag_id)` PK so duplicates no-op.
+- New hook `src/hooks/use-tags.ts` — invalidates `["tasks"]` on attach/
+  detach so the inline chips refresh.
+- `task-detail-sheet.tsx` — new `TagsSection` with autocomplete input,
+  "Create tag '{x}'" inline action, click-to-remove chips.
+- `tasks-view.tsx` — rich filter toolbar (search, status incl. Open/
+  Overdue, assignee, priority, client, lead, tag chips OR-match) with
+  filters round-tripped through URL params and backed up to
+  `localStorage["viddix:tasks-filters"]`; Reset button when any filter is
+  active. Inline tag chips on each row (max 3 + "+N" overflow). The
+  /tasks page is wrapped in a `<Suspense>` boundary so `useSearchParams`
+  doesn't bail out of static prerender.
+
 ## What we did NOT change
 
 - No business logic, hooks, queries, mutations, or `lib/metrics.ts`.

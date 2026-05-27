@@ -1,7 +1,8 @@
 // Database typing — kept in sync with src/supabase/migrations/001_init.sql
 // onwards. Recent additions: 015 (client contract/renewal dates), 016
 // (multi-contact per client), 017 (contact activity kinds), 018 (tasks plus:
-// subtasks/recurrence/time tracking), 019 (task-plus activity kinds).
+// subtasks/recurrence/time tracking), 019 (task-plus activity kinds), 020
+// (tags + task_tags many-to-many).
 export type LeadStage =
   | "new"
   | "contacted"
@@ -243,6 +244,21 @@ export type Contact = {
   updated_at: string
 }
 
+// Tags + task_tags (migration 020). The `tags` table is entity-agnostic so
+// future lead_tags / client_tags additions can reuse it without a rename.
+export type Tag = {
+  id: string
+  name: string
+  // Pill tone key (slate / blue / sky / indigo / violet / emerald / amber / rose).
+  color: string
+  created_at: string
+}
+
+export type TaskTag = {
+  task_id: string
+  tag_id: string
+}
+
 export type Note = {
   id: string
   content: string
@@ -308,6 +324,15 @@ export type Database = {
       partners:           Row<Partner>
       client_partners:    Row<ClientPartner>
       activities:         Row<Activity>
+      tags:               Row<Tag>
+      // task_tags has no auto-managed columns — both task_id and tag_id are
+      // required on insert.
+      task_tags: {
+        Row: TaskTag
+        Insert: TaskTag
+        Update: Partial<TaskTag>
+        Relationships: []
+      }
     }
     Views: Record<string, never>
     Functions: Record<string, never>

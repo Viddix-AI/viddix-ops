@@ -21,8 +21,10 @@ import type {
   Note,
   Partner,
   Profile,
+  Tag,
   Task,
   TaskRecurrence,
+  TaskTag,
   TaskTimeEntry,
 } from "@/lib/types"
 
@@ -1001,6 +1003,58 @@ export const supabaseBackend: Backend = {
   async deleteNote(id) {
     const r = await db().from("notes").delete().eq("id", id)
     if (r.error) throw new Error(`Supabase: deleteNote — ${r.error.message}`)
+  },
+
+  // ── tags ─────────────────────────────────────────────────────────────────
+  async tags() {
+    const r = await db().from("tags").select("*").order("name")
+    return unwrap(r, "tags") as Tag[]
+  },
+  async tagsFor(taskId) {
+    // Two-step join — we declare Relationships: [] in types.ts so the typed
+    // select can't infer the joined shape. Pull links, then look up tags.
+    const links = await db()
+      .from("task_tags")
+      .select("tag_id")
+      .eq("task_id", taskId)
+    if (links.error) throw new Error(`Supabase: tagsFor.links — ${links.error.message}`)
+    const ids = (links.data ?? []).map((l) => l.tag_id)
+    if (ids.length === 0) return []
+    const tags = await db().from("tags").select("*").in("id", ids).order("name")
+    return unwrap(tags, "tagsFor.tags") as Tag[]
+  },
+  async taskTags() {
+    const r = await db().from("task_tags").select("*")
+    return unwrap(r, "taskTags") as TaskTag[]
+  },
+  async createTag(input) {
+    // Idempotent on the unique (name) constraint — upsert returns the
+    // existing row instead of erroring when the name already exists.
+    const r = await db()
+      .from("tags")
+      .upsert({ name: input.name.trim(), color: input.color ?? "slate" }, { onConflict: "name" })
+      .select()
+      .single()
+    return unwrap(r, "createTag") as Tag
+  },
+  async deleteTag(id) {
+    const r = await db().from("tags").delete().eq("id", id)
+    if (r.error) throw new Error(`Supabase: deleteTag — ${r.error.message}`)
+  },
+  async attachTag(input) {
+    // PK is (task_id, tag_id); upsert silently no-ops if already attached.
+    const r = await db()
+      .from("task_tags")
+      .upsert(input, { onConflict: "task_id,tag_id" })
+    if (r.error) throw new Error(`Supabase: attachTag — ${r.error.message}`)
+  },
+  async detachTag(input) {
+    const r = await db()
+      .from("task_tags")
+      .delete()
+      .eq("task_id", input.task_id)
+      .eq("tag_id", input.tag_id)
+    if (r.error) throw new Error(`Supabase: detachTag — ${r.error.message}`)
   },
 }
 

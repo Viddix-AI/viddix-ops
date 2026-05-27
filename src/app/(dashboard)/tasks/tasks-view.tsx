@@ -1,8 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { CheckSquare, ChevronRight, Clock, ExternalLink, Repeat } from "lucide-react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { CheckSquare, ChevronRight, Clock, ExternalLink, Repeat, Search, X } from "lucide-react"
 
+import { Input } from "@/components/ui/input"
+import { Pill, type PillTone } from "@/components/ui/pill"
+import { Button } from "@/components/ui/button"
 import {
   Select,
   SelectContent,
@@ -19,10 +23,11 @@ import { useClients } from "@/hooks/use-clients"
 import { useEvents } from "@/hooks/use-events"
 import { useLeads } from "@/hooks/use-leads"
 import { useProfiles } from "@/hooks/use-profile"
+import { useTags, useTaskTags } from "@/hooks/use-tags"
 import { useTasks, useUpdateTask } from "@/hooks/use-tasks"
 import { relativeDay } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import type { Profile, Task, TaskPriority } from "@/lib/types"
+import type { Profile, Tag, Task, TaskPriority } from "@/lib/types"
 import { TaskDetailSheet } from "./task-detail-sheet"
 
 const PRIORITIES: { value: TaskPriority; label: string }[] = [
@@ -41,12 +46,94 @@ const GROUP_LABELS: Record<Group, string> = {
   later: "Later",
 }
 
+// Status filter has its own vocabulary beyond TaskStatus — "open" matches
+// any non-done, "overdue" cross-cuts status + due_date.
+type StatusFilter = "all" | "open" | "todo" | "in_progress" | "done" | "overdue"
+
+const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
+  { value: "all",         label: "All statuses" },
+  { value: "open",        label: "Open (not done)" },
+  { value: "todo",        label: "To do" },
+  { value: "in_progress", label: "In progress" },
+  { value: "done",        label: "Done" },
+  { value: "overdue",     label: "Overdue" },
+]
+
+const TAG_TONE_SET = new Set<string>(["slate", "blue", "sky", "indigo", "violet", "emerald", "amber", "rose"])
+function tagTone(t: Tag): PillTone {
+  return (TAG_TONE_SET.has(t.color) ? t.color : "slate") as PillTone
+}
+
+// Filter persistence: URL params win when present (deep-link / back-forward
+// preserves filters), localStorage backs them up so a navigation away and
+// back inside the app retains the choices.
+const FILTERS_KEY = "viddix:tasks-filters"
+
+type Filters = {
+  q: string
+  status: StatusFilter
+  assignee: string
+  priority: TaskPriority | ""
+  client: string
+  lead: string
+  tags: string[] // tag ids; OR-match
+}
+
+const EMPTY_FILTERS: Filters = {
+  q: "",
+  status: "all",
+  assignee: "",
+  priority: "",
+  client: "",
+  lead: "",
+  tags: [],
+}
+
+function filtersFromParams(params: URLSearchParams): Filters {
+  const status = params.get("status") as StatusFilter | null
+  const priority = params.get("priority") as TaskPriority | null
+  const tagsRaw = params.get("tags")
+  return {
+    q:        params.get("q") ?? "",
+    status:   status && STATUS_FILTERS.some((s) => s.value === status) ? status : "all",
+    assignee: params.get("assignee") ?? "",
+    priority: priority && PRIORITIES.some((p) => p.value === priority) ? priority : "",
+    client:   params.get("client") ?? "",
+    lead:     params.get("lead") ?? "",
+    tags:     tagsRaw ? tagsRaw.split(",").filter(Boolean) : [],
+  }
+}
+
+function filtersToParams(f: Filters): URLSearchParams {
+  const p = new URLSearchParams()
+  if (f.q)                            p.set("q", f.q)
+  if (f.status && f.status !== "all") p.set("status", f.status)
+  if (f.assignee)                     p.set("assignee", f.assignee)
+  if (f.priority)                     p.set("priority", f.priority)
+  if (f.client)                       p.set("client", f.client)
+  if (f.lead)                         p.set("lead", f.lead)
+  if (f.tags.length > 0)              p.set("tags", f.tags.join(","))
+  return p
+}
+
+function isEmpty(f: Filters): boolean {
+  return (
+    !f.q && f.status === "all" && !f.assignee && !f.priority &&
+    !f.client && !f.lead && f.tags.length === 0
+  )
+}
+
 export function TasksView() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const { data: tasks = [] } = useTasks()
   const { data: profiles = [] } = useProfiles()
   const { data: leads = [] } = useLeads()
   const { data: clients = [] } = useClients()
   const { data: events = [] } = useEvents()
+  const { data: tags = [] } = useTags()
+  const { data: taskTags = [] } = useTaskTags()
   const update = useUpdateTask()
 
   const pairedTaskIds = React.useMemo(
@@ -67,8 +154,77 @@ export function TasksView() {
     return m
   }, [tasks])
 
-  const [filterAssignee, setFilterAssignee] = React.useState("")
-  const [filterPriority, setFilterPriority] = React.useState<TaskPriority | "">("")
+  // ── Filters ─────────────────────────────────────────────────────────────
+  // Initial value: URL params win, fall back to localStorage, then EMPTY.
+  // Doing this in a lazy initialiser avoids a flicker on first render.
+  const [filters, setFilters] = React.useState<Filters>(() => {
+    if (typeof window === "undefined") return EMPTY_FILTERS
+    const fromUrl = filtersFromParams(new URLSearchParams(window.location.search))
+    if (!isEmpty(fromUrl)) return fromUrl
+    try {
+      const raw = window.localStorage.getItem(FILTERS_KEY)
+      if (raw) return { ...EMPTY_FILTERS, ...(JSON.parse(raw) as Partial<Filters>) }
+    } catch {}
+    return EMPTY_FILTERS
+  })
+
+  // Keep URL + localStorage in sync with the filter state. Replacing (not
+  // pushing) so the back button isn't littered with each filter tweak.
+  React.useEffect(() => {
+    if (typeof window === "undefined") return
+    const qs = filtersToParams(filters).toString()
+    const next = qs ? `${pathname}?${qs}` : pathname
+    if (next !== window.location.pathname + window.location.search) {
+      router.replace(next, { scroll: false })
+    }
+    try {
+      if (isEmpty(filters)) window.localStorage.removeItem(FILTERS_KEY)
+      else window.localStorage.setItem(FILTERS_KEY, JSON.stringify(filters))
+    } catch {}
+  }, [filters, pathname, router])
+
+  // External URL changes (browser back/forward, command palette deep link)
+  // should win over local state. Bridge via the searchParams hook.
+  const urlSnapshot = searchParams.toString()
+  const [prevUrlSnapshot, setPrevUrlSnapshot] = React.useState(urlSnapshot)
+  if (urlSnapshot !== prevUrlSnapshot) {
+    setPrevUrlSnapshot(urlSnapshot)
+    const fromUrl = filtersFromParams(new URLSearchParams(urlSnapshot))
+    if (JSON.stringify(fromUrl) !== JSON.stringify(filters)) {
+      setFilters(fromUrl)
+    }
+  }
+
+  function set<K extends keyof Filters>(key: K, value: Filters[K]) {
+    setFilters((f) => ({ ...f, [key]: value }))
+  }
+  function toggleTagFilter(tagId: string) {
+    setFilters((f) =>
+      f.tags.includes(tagId)
+        ? { ...f, tags: f.tags.filter((id) => id !== tagId) }
+        : { ...f, tags: [...f.tags, tagId] }
+    )
+  }
+  function resetFilters() {
+    setFilters(EMPTY_FILTERS)
+  }
+
+  // Tag index — { task_id: Set<tag_id> } for O(1) membership tests.
+  const tagsByTask = React.useMemo(() => {
+    const m = new Map<string, Set<string>>()
+    for (const tt of taskTags) {
+      const set = m.get(tt.task_id) ?? new Set<string>()
+      set.add(tt.tag_id)
+      m.set(tt.task_id, set)
+    }
+    return m
+  }, [taskTags])
+  const tagById = React.useMemo(() => {
+    const m = new Map<string, Tag>()
+    for (const t of tags) m.set(t.id, t)
+    return m
+  }, [tags])
+
   const [activeTaskId, setActiveTaskId] = React.useState<string | null>(null)
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set())
 
@@ -99,13 +255,45 @@ export function TasksView() {
     return "later"
   }
 
-  // Filtering: assignee filter matches if the task contains the picked id.
-  // Subtasks (parent_id != null) are excluded from the root listing — they
-  // render inline under their parent when expanded.
+  // Filtering: subtasks (parent_id != null) are excluded from the root
+  // listing — they render inline under their parent when expanded.
+  // Everything else is in-memory client-side; the contract of `filtered`
+  // doesn't change if we later push filters server-side.
+  const todayISO = React.useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const needle = filters.q.trim().toLowerCase()
   const filtered = tasks.filter((t) => {
     if (t.parent_id) return false
-    if (filterAssignee && !t.assignee_ids.includes(filterAssignee)) return false
-    if (filterPriority && t.priority !== filterPriority) return false
+
+    // status
+    if (filters.status === "open" && t.status === "done") return false
+    if (filters.status === "todo" && t.status !== "todo") return false
+    if (filters.status === "in_progress" && t.status !== "in_progress") return false
+    if (filters.status === "done" && t.status !== "done") return false
+    if (filters.status === "overdue") {
+      if (t.status === "done") return false
+      if (!t.due_date || t.due_date >= todayISO) return false
+    }
+
+    if (filters.assignee && !t.assignee_ids.includes(filters.assignee)) return false
+    if (filters.priority && t.priority !== filters.priority) return false
+    if (filters.client && t.client_id !== filters.client) return false
+    if (filters.lead && t.lead_id !== filters.lead) return false
+
+    // Tags: OR-match. A task passes if it carries ANY of the selected tags.
+    if (filters.tags.length > 0) {
+      const taskTagSet = tagsByTask.get(t.id)
+      if (!taskTagSet) return false
+      if (!filters.tags.some((id) => taskTagSet.has(id))) return false
+    }
+
+    if (needle) {
+      const haystack = (
+        t.title +
+        " " +
+        (t.description ?? "")
+      ).toLowerCase()
+      if (!haystack.includes(needle)) return false
+    }
     return true
   })
 
@@ -133,39 +321,97 @@ export function TasksView() {
       />
 
       <div className="space-y-6 px-4 py-5 lg:px-6">
-        <div className="flex items-center gap-2">
-          <Select
-            value={filterAssignee}
-            onValueChange={(v) => setFilterAssignee(v ?? "")}
-          >
-            <SelectTrigger size="sm">
-              <SelectValue placeholder="All assignees" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">All assignees</SelectItem>
-              {profiles.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.full_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={filterPriority}
-            onValueChange={(v) => setFilterPriority((v ?? "") as TaskPriority | "")}
-          >
-            <SelectTrigger size="sm">
-              <SelectValue placeholder="All priorities" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">All priorities</SelectItem>
-              {PRIORITIES.map((p) => (
-                <SelectItem key={p.value} value={p.value}>
-                  {p.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-[200px] flex-1">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-text-tertiary" />
+              <Input
+                value={filters.q}
+                onChange={(e) => set("q", e.target.value)}
+                placeholder="Search tasks…"
+                className="h-8 pl-8"
+              />
+            </div>
+            <FilterSelect
+              value={filters.status}
+              onChange={(v) => set("status", v as StatusFilter)}
+              placeholder="All statuses"
+              options={STATUS_FILTERS}
+            />
+            <FilterSelect
+              value={filters.assignee}
+              onChange={(v) => set("assignee", v)}
+              placeholder="All assignees"
+              options={[
+                { value: "", label: "All assignees" },
+                ...profiles.map((p) => ({ value: p.id, label: p.full_name })),
+              ]}
+            />
+            <FilterSelect
+              value={filters.priority}
+              onChange={(v) => set("priority", v as TaskPriority | "")}
+              placeholder="All priorities"
+              options={[
+                { value: "", label: "All priorities" },
+                ...PRIORITIES.map((p) => ({ value: p.value, label: p.label })),
+              ]}
+            />
+            <FilterSelect
+              value={filters.client}
+              onChange={(v) => set("client", v)}
+              placeholder="All clients"
+              options={[
+                { value: "", label: "All clients" },
+                ...clients.map((c) => ({ value: c.id, label: c.name })),
+              ]}
+            />
+            <FilterSelect
+              value={filters.lead}
+              onChange={(v) => set("lead", v)}
+              placeholder="All leads"
+              options={[
+                { value: "", label: "All leads" },
+                ...leads.map((l) => ({ value: l.id, label: l.name })),
+              ]}
+            />
+            {!isEmpty(filters) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={resetFilters}
+                className="text-text-tertiary"
+              >
+                <X />
+                Reset
+              </Button>
+            )}
+          </div>
+          {tags.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-text-tertiary">
+                Tags
+              </span>
+              {tags.map((t) => {
+                const active = filters.tags.includes(t.id)
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => toggleTagFilter(t.id)}
+                    aria-pressed={active}
+                    className={cn(
+                      "rounded-full transition-opacity",
+                      !active && "opacity-60 hover:opacity-100"
+                    )}
+                  >
+                    <Pill tone={tagTone(t)} size="sm">
+                      {t.name}
+                    </Pill>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         {(["overdue", "today", "week", "later"] as Group[]).map((group) => {
@@ -191,6 +437,8 @@ export function TasksView() {
                     clients={clients}
                     pairedTaskIds={pairedTaskIds}
                     subtaskMap={subtaskMap}
+                    tagsByTask={tagsByTask}
+                    tagById={tagById}
                     expanded={expanded}
                     onToggleExpand={toggleExpand}
                     onToggleDone={toggleDone}
@@ -221,6 +469,42 @@ export function TasksView() {
 }
 
 /**
+ * Compact filter <Select> used in the toolbar. Takes a sentinel "" value to
+ * mean "no filter" (Base-UI Select can't accept "" as an item value, so we
+ * map it through a private NONE constant on its way in/out).
+ */
+const NONE = "__none__"
+function FilterSelect({
+  value,
+  onChange,
+  placeholder,
+  options,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder: string
+  options: { value: string; label: string }[]
+}) {
+  return (
+    <Select
+      value={value === "" ? NONE : value}
+      onValueChange={(v) => onChange(!v || v === NONE ? "" : v)}
+    >
+      <SelectTrigger size="sm" className="min-w-[140px]">
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((o) => (
+          <SelectItem key={o.value || NONE} value={o.value === "" ? NONE : o.value}>
+            {o.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
+/**
  * One row in the tasks list. Subtasks are rendered inline-indented under
  * their parent when the parent is expanded. Recurrence and tracked-time are
  * surfaced as compact badges next to the title; expand chevron only appears
@@ -233,6 +517,8 @@ function TaskRow({
   clients,
   pairedTaskIds,
   subtaskMap,
+  tagsByTask,
+  tagById,
   expanded,
   onToggleExpand,
   onToggleDone,
@@ -245,6 +531,8 @@ function TaskRow({
   clients: ReturnType<typeof useClients>["data"]
   pairedTaskIds: Set<string>
   subtaskMap: Map<string, Task[]>
+  tagsByTask: Map<string, Set<string>>
+  tagById: Map<string, Tag>
   expanded: Set<string>
   onToggleExpand: (id: string) => void
   onToggleDone: (task: Task) => void
@@ -260,6 +548,11 @@ function TaskRow({
   const hasChildren = children.length > 0
   const isExpanded = expanded.has(task.id)
   const tracked = task.tracked_minutes ?? 0
+  const ownTags = Array.from(tagsByTask.get(task.id) ?? [])
+    .map((id) => tagById.get(id))
+    .filter((t): t is Tag => Boolean(t))
+  const visibleTags = ownTags.slice(0, 3)
+  const extraTagCount = Math.max(0, ownTags.length - visibleTags.length)
 
   return (
     <>
@@ -328,6 +621,20 @@ function TaskRow({
                   : `${tracked}m`}
               </span>
             )}
+            {visibleTags.length > 0 && (
+              <span className="ml-2 inline-flex flex-wrap gap-1 align-middle">
+                {visibleTags.map((t) => (
+                  <Pill key={t.id} tone={tagTone(t)} size="sm">
+                    {t.name}
+                  </Pill>
+                ))}
+                {extraTagCount > 0 && (
+                  <span className="text-[10px] font-medium text-text-tertiary">
+                    +{extraTagCount}
+                  </span>
+                )}
+              </span>
+            )}
           </p>
           {(linkedLead || linkedClient) && (
             <p className="mt-0.5 truncate text-[11px] text-text-tertiary">
@@ -382,6 +689,8 @@ function TaskRow({
             clients={clients}
             pairedTaskIds={pairedTaskIds}
             subtaskMap={subtaskMap}
+            tagsByTask={tagsByTask}
+            tagById={tagById}
             expanded={expanded}
             onToggleExpand={onToggleExpand}
             onToggleDone={onToggleDone}
