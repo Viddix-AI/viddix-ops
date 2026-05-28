@@ -596,7 +596,19 @@ function FilterSelect({
       onValueChange={(v) => onChange(!v || v === NONE ? "" : v)}
     >
       <SelectTrigger size="sm" className="min-w-[140px]">
-        <SelectValue placeholder={placeholder} />
+        {/*
+          Base-UI's Select.Value renders the raw `value` string when no children
+          render-fn is provided — that's how the literal "__none__" sentinel was
+          leaking into the trigger. Resolving the friendly label from `options`
+          here keeps the placeholder fallback while showing "All assignees" /
+          "Group by · Due date" / etc. in the unselected state.
+        */}
+        <SelectValue placeholder={placeholder}>
+          {(v: string | null) => {
+            const original = v === NONE ? "" : (v ?? "")
+            return options.find((o) => o.value === original)?.label ?? placeholder
+          }}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {options.map((o) => (

@@ -44,50 +44,38 @@ export function PipelineFunnel({ leads }: { leads: Lead[] }) {
           </div>
         ) : (
           <>
-            <div className="flex items-stretch gap-1">
+            <FunnelShape rows={rows} top={top} />
+
+            {/*
+              Data row underneath the funnel. The visual taper above is the
+              headline; this row carries the per-stage numbers + the conversion
+              ratio between consecutive stages.
+            */}
+            <div className="mt-3 flex items-stretch gap-1">
               {rows.map((row, i) => {
                 const stage = LEAD_STAGES.find((s) => s.id === row.stage)
-                const pct = top === 0 ? 0 : (row.count / top) * 100
-                // Bar width scales with the cumulative count so the funnel
-                // narrows visibly as stages progress. Floor at 18% so
-                // empty late stages still show a sliver to be discoverable.
-                const widthPct = Math.max(18, pct)
                 return (
                   <React.Fragment key={row.stage}>
                     {i > 0 && (
                       <ConversionIndicator value={row.conversion ?? null} />
                     )}
                     <div
-                      className="flex min-w-0 flex-1 flex-col gap-1.5"
-                      style={{ flexBasis: `${widthPct}%` }}
+                      className={cn(
+                        "flex min-w-0 flex-1 flex-col items-start gap-1.5",
+                        row.count === 0 && "opacity-60"
+                      )}
                     >
                       <Pill tone={stage?.pillTone ?? "slate"} size="sm" uppercase>
                         {stage?.label ?? row.stage}
                       </Pill>
-                      <div
-                        className={cn(
-                          "relative h-20 overflow-hidden rounded-md border border-border-subtle bg-surface-2",
-                          row.count === 0 && "opacity-60"
-                        )}
-                      >
-                        <div
-                          aria-hidden
-                          className="absolute inset-x-0 bottom-0 bg-primary/12 transition-all"
-                          style={{
-                            height: `${Math.max(6, pct)}%`,
-                          }}
-                        />
-                        <div className="relative flex h-full flex-col justify-end p-2.5">
-                          <p className="font-display text-[22px] leading-none tracking-[-0.02em] tabular-nums text-text-primary">
-                            {row.count}
-                          </p>
-                          {row.value > 0 && (
-                            <p className="mt-1 font-mono text-[10px] tabular-nums text-text-tertiary">
-                              {money(row.value)}
-                            </p>
-                          )}
-                        </div>
-                      </div>
+                      <p className="font-display text-[20px] leading-none tracking-[-0.02em] tabular-nums text-text-primary">
+                        {row.count}
+                      </p>
+                      {row.value > 0 && (
+                        <p className="font-mono text-[10px] tabular-nums text-text-tertiary">
+                          {money(row.value)}
+                        </p>
+                      )}
                     </div>
                   </React.Fragment>
                 )
@@ -115,6 +103,72 @@ export function PipelineFunnel({ leads }: { leads: Lead[] }) {
         )}
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * Tapered SVG funnel — one trapezoidal slice per stage. The left edge of
+ * each slice matches the previous slice's right edge so the shape reads as
+ * a single continuous funnel narrowing from `new` toward `won`. The trailing
+ * edge of the final slice steps inward to ~30% of its own height to give
+ * the unmistakable "funnel tip" silhouette.
+ *
+ * Slice height is proportional to `count / topCount`, floored at MIN_H so
+ * empty late stages still render a sliver instead of disappearing.
+ */
+function FunnelShape({
+  rows,
+  top,
+}: {
+  rows: ReturnType<typeof pipelineFunnel>
+  top: number
+}) {
+  const W = 1000
+  const H = 140
+  const MIN_H = 14
+
+  const slabs = rows.map((r) => {
+    if (top === 0) return MIN_H
+    const ratio = r.count / top
+    return Math.max(MIN_H, ratio * H)
+  })
+
+  // Synthetic trailing edge so the last slice tapers inward visibly.
+  const edges = [...slabs, Math.max(MIN_H * 0.5, (slabs[slabs.length - 1] ?? MIN_H) * 0.3)]
+  const N = rows.length
+  const sliceW = N > 0 ? W / N : 0
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+      className="block h-32 w-full"
+      role="img"
+      aria-label="Sales pipeline funnel"
+    >
+      {rows.map((r, i) => {
+        const x0 = i * sliceW
+        const x1 = x0 + sliceW
+        const hL = edges[i]
+        const hR = edges[i + 1]
+        const yTopL = (H - hL) / 2
+        const yBotL = (H + hL) / 2
+        const yTopR = (H - hR) / 2
+        const yBotR = (H + hR) / 2
+        return (
+          <polygon
+            key={r.stage}
+            points={`${x0},${yTopL} ${x1},${yTopR} ${x1},${yBotR} ${x0},${yBotL}`}
+            className={cn(
+              "fill-primary/15 stroke-border-subtle",
+              r.count === 0 && "fill-primary/5"
+            )}
+            strokeWidth={1}
+            vectorEffect="non-scaling-stroke"
+          />
+        )
+      })}
+    </svg>
   )
 }
 

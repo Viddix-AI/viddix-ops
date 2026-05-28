@@ -17,6 +17,14 @@ import { googleCalendarUrl } from "@/lib/ics"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { KPIStat } from "@/components/ui/kpi-stat"
+import { PieChart, pieToneFor } from "@/components/ui/pie-chart"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Sparkline } from "@/components/ui/sparkline"
 import { AvatarStack } from "@/components/dashboard/avatar-stack"
 import { EmptyState } from "@/components/dashboard/empty-state"
@@ -119,28 +127,80 @@ export default function DashboardHome() {
     [clients, leads, tasks]
   )
 
-  const sourceConversion = React.useMemo(() => {
+  // Conversion widget — switchable between Source and Owner. Industry is not
+  // exposed here because Lead has no `industry` column (the dimension would
+  // require joining converted_client_id, which we deliberately skip per the
+  // plan: "only expose dimensions each entity has natively").
+  const [conversionDim, setConversionDim] = React.useState<"source" | "owner">(
+    "source"
+  )
+  const conversion = React.useMemo(() => {
     const map = new Map<
       string,
-      { total: number; won: number; pipelineValue: number }
+      { label: string; total: number; won: number; pipelineValue: number }
     >()
     for (const l of leads) {
-      const key = (l.source ?? "").trim()
-      if (!key) continue
-      const cur = map.get(key) ?? { total: 0, won: 0, pipelineValue: 0 }
+      let key: string
+      let label: string
+      if (conversionDim === "source") {
+        key = (l.source ?? "").trim()
+        if (!key) continue
+        label = key
+      } else {
+        // Owner dim — include unassigned leads under a fixed sentinel key so
+        // the bucket still surfaces, matching the "Unassigned" treatment used
+        // elsewhere on the dashboard.
+        key = l.owner_id ?? "__none__"
+        const owner = l.owner_id
+          ? profiles.find((p) => p.id === l.owner_id)
+          : null
+        label = owner?.full_name ?? "Unassigned"
+      }
+      const cur = map.get(key) ?? { label, total: 0, won: 0, pipelineValue: 0 }
       cur.total += 1
       cur.pipelineValue += Number(l.value || 0)
       if (l.stage === "won") cur.won += 1
       map.set(key, cur)
     }
     return Array.from(map.entries())
-      .map(([source, stats]) => ({
-        source,
+      .map(([key, stats]) => ({
+        key,
         ...stats,
         rate: stats.total === 0 ? 0 : (stats.won / stats.total) * 100,
       }))
       .sort((a, b) => b.total - a.total)
-  }, [leads])
+  }, [leads, conversionDim, profiles])
+
+  // Clients pie chart — switchable between Industry and Owner. Source is not
+  // exposed because Client has no `source` column (per plan: only native
+  // dimensions, no joins through converted_client_id).
+  const [clientDim, setClientDim] = React.useState<"industry" | "owner">(
+    "industry"
+  )
+  const clientsByDimension = React.useMemo(() => {
+    const map = new Map<string, { label: string; value: number }>()
+    for (const c of clients) {
+      let key: string
+      let label: string
+      if (clientDim === "industry") {
+        const raw = (c.industry ?? "").trim()
+        key = raw || "__unspecified__"
+        label = raw || "Unspecified"
+      } else {
+        key = c.owner_id ?? "__none__"
+        const owner = c.owner_id
+          ? profiles.find((p) => p.id === c.owner_id)
+          : null
+        label = owner?.full_name ?? "Unassigned"
+      }
+      const cur = map.get(key) ?? { label, value: 0 }
+      cur.value += 1
+      map.set(key, cur)
+    }
+    return Array.from(map.entries())
+      .map(([key, stats]) => ({ key, ...stats }))
+      .sort((a, b) => b.value - a.value)
+  }, [clients, clientDim, profiles])
 
   const upcoming = React.useMemo(
     () =>
@@ -278,9 +338,9 @@ export default function DashboardHome() {
           <RecentActivity />
         </section>
 
-        {/* ── Partner earnings + Conversion by source ─────────────────────── */}
+        {/* ── Partner earnings + Conversion + Clients distribution ─────────── */}
         <section
-          className="grid gap-4 lg:grid-cols-2"
+          className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3"
           style={{ animationDelay: "180ms" }}
         >
           <Card>
@@ -333,26 +393,48 @@ export default function DashboardHome() {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Conversion by source</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+              <CardTitle>Conversion</CardTitle>
+              <Select
+                value={conversionDim}
+                onValueChange={(v) =>
+                  setConversionDim((v ?? "source") as "source" | "owner")
+                }
+              >
+                <SelectTrigger size="sm" className="min-w-[120px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="source">By source</SelectItem>
+                  <SelectItem value="owner">By owner</SelectItem>
+                </SelectContent>
+              </Select>
             </CardHeader>
             <CardContent>
-              {sourceConversion.length === 0 ? (
+              {conversion.length === 0 ? (
                 <EmptyState
                   size="sm"
-                  title="No source data"
-                  description="Add leads with a source to see conversion rates."
+                  title={
+                    conversionDim === "source"
+                      ? "No source data"
+                      : "No owner data"
+                  }
+                  description={
+                    conversionDim === "source"
+                      ? "Add leads with a source to see conversion rates."
+                      : "Assign an owner to a lead to see conversion rates."
+                  }
                 />
               ) : (
                 <ul className="divide-y divide-border-subtle">
-                  {sourceConversion.map((s) => (
+                  {conversion.map((s) => (
                     <li
-                      key={s.source}
+                      key={s.key}
                       className="flex items-center justify-between gap-3 py-2 text-sm"
                     >
                       <div className="min-w-0">
                         <p className="truncate font-medium text-text-primary">
-                          {s.source}
+                          {s.label}
                         </p>
                         <p className="text-[11px] font-medium text-text-tertiary">
                           {s.total} lead{s.total === 1 ? "" : "s"} ·{" "}
@@ -370,6 +452,87 @@ export default function DashboardHome() {
                     </li>
                   ))}
                 </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+              <CardTitle>Clients</CardTitle>
+              <Select
+                value={clientDim}
+                onValueChange={(v) =>
+                  setClientDim((v ?? "industry") as "industry" | "owner")
+                }
+              >
+                <SelectTrigger size="sm" className="min-w-[120px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="industry">By industry</SelectItem>
+                  <SelectItem value="owner">By owner</SelectItem>
+                </SelectContent>
+              </Select>
+            </CardHeader>
+            <CardContent>
+              {clientsByDimension.length === 0 ? (
+                <EmptyState
+                  size="sm"
+                  title="No clients"
+                  description={
+                    clientDim === "industry"
+                      ? "Set an industry on a client to see them here."
+                      : "Assign an owner to a client to see them here."
+                  }
+                />
+              ) : (
+                <div className="flex items-center gap-4">
+                  <PieChart
+                    data={clientsByDimension}
+                    size={140}
+                    thickness={32}
+                    className="shrink-0"
+                  />
+                  <ul className="min-w-0 flex-1 space-y-1.5 text-sm">
+                    {clientsByDimension.slice(0, 6).map((s, i) => {
+                      const totalClients = clientsByDimension.reduce(
+                        (acc, x) => acc + x.value,
+                        0
+                      )
+                      const pct =
+                        totalClients === 0
+                          ? 0
+                          : (s.value / totalClients) * 100
+                      return (
+                        <li
+                          key={s.key}
+                          className="flex items-center justify-between gap-3"
+                        >
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span
+                              aria-hidden
+                              className={`inline-block size-2 shrink-0 rounded-full ${pieToneFor(i).text} bg-current`}
+                            />
+                            <span className="truncate text-text-primary">
+                              {s.label}
+                            </span>
+                          </span>
+                          <span className="shrink-0 font-mono text-[11px] tabular-nums text-text-tertiary">
+                            {s.value}{" "}
+                            <span className="text-text-tertiary/70">
+                              · {pct.toFixed(0)}%
+                            </span>
+                          </span>
+                        </li>
+                      )
+                    })}
+                    {clientsByDimension.length > 6 && (
+                      <li className="text-[11px] text-text-tertiary">
+                        +{clientsByDimension.length - 6} more
+                      </li>
+                    )}
+                  </ul>
+                </div>
               )}
             </CardContent>
           </Card>

@@ -40,6 +40,7 @@ import {
   useContactsFor,
   useDeleteContact,
   useSetPrimaryContact,
+  useUpdateContact,
 } from "@/hooks/use-contacts"
 import { useEvents } from "@/hooks/use-events"
 import { useCreateNote, useNotesFor } from "@/hooks/use-notes"
@@ -59,6 +60,7 @@ import { AddContactDialog } from "./add-contact-dialog"
 export function ClientDetail({ id }: { id: string }) {
   const { data: client } = useClient(id)
   const update = useUpdateClient()
+  const updateContact = useUpdateContact()
   const { data: profiles = [] } = useProfiles()
   const me = useCurrentProfile()
   const { data: tasks = [] } = useTasks()
@@ -83,6 +85,33 @@ export function ClientDetail({ id }: { id: string }) {
   // row is flagged primary (shouldn't happen post-migration, but defensive).
   const primaryContact =
     contacts.find((c) => c.is_primary) ?? contacts[0] ?? null
+
+  // Edits to Contact / Email / Phone in the Overview card target the primary
+  // contact row when one exists, otherwise fall back to the legacy
+  // clients.contact_* shortcut columns. This matches the resolution rule used
+  // for display ('primaryContact?.x ?? client.contact_x') so the field you
+  // type into is the one that surfaces back.
+  function saveContactField(
+    field: "full_name" | "email" | "phone",
+    value: string | null
+  ) {
+    if (!client) return
+    if (primaryContact) {
+      const patch: Partial<Contact> = { [field]: value }
+      updateContact.mutate({
+        id: primaryContact.id,
+        clientId: client.id,
+        patch,
+      })
+      return
+    }
+    const legacy: Record<typeof field, "contact_name" | "contact_email" | "contact_phone"> = {
+      full_name: "contact_name",
+      email:     "contact_email",
+      phone:     "contact_phone",
+    }
+    update.mutate({ id: client.id, patch: { [legacy[field]]: value } })
+  }
 
   if (!client) {
     return (
@@ -132,44 +161,66 @@ export function ClientDetail({ id }: { id: string }) {
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 sm:grid-cols-2">
-                <ContactRow label="Industry" value={client.industry} />
+                <EditableField
+                  label="Industry"
+                  value={client.industry}
+                  onSave={(v) =>
+                    update.mutate({ id: client.id, patch: { industry: v } })
+                  }
+                />
                 <ContactRow label="Started" value={client.started_at} />
-                <DateField
+                <EditableField
                   label="Contract start"
+                  type="date"
                   value={client.contract_start_date}
                   onSave={(v) =>
                     update.mutate({ id: client.id, patch: { contract_start_date: v } })
                   }
                 />
-                <DateField
+                <EditableField
                   label="Contract end"
+                  type="date"
                   value={client.contract_end_date}
                   onSave={(v) =>
                     update.mutate({ id: client.id, patch: { contract_end_date: v } })
                   }
                 />
-                <DateField
+                <EditableField
                   label="Next renewal"
+                  type="date"
                   value={client.renewal_date}
                   onSave={(v) =>
                     update.mutate({ id: client.id, patch: { renewal_date: v } })
                   }
                 />
-                <ContactRow
+                <EditableField
                   label="Contact"
                   value={primaryContact?.full_name ?? client.contact_name}
+                  onSave={(v) => saveContactField("full_name", v)}
                 />
-                <ContactRow
+                <EditableField
                   icon={<Mail className="size-3.5" />}
                   label="Email"
+                  type="email"
                   value={primaryContact?.email ?? client.contact_email}
+                  onSave={(v) => saveContactField("email", v)}
                 />
-                <ContactRow
+                <EditableField
                   icon={<Phone className="size-3.5" />}
                   label="Phone"
+                  type="tel"
                   value={primaryContact?.phone ?? client.contact_phone}
+                  onSave={(v) => saveContactField("phone", v)}
                 />
-                <ContactRow icon={<Globe className="size-3.5" />} label="Website" value={client.website} />
+                <EditableField
+                  icon={<Globe className="size-3.5" />}
+                  label="Website"
+                  type="url"
+                  value={client.website}
+                  onSave={(v) =>
+                    update.mutate({ id: client.id, patch: { website: v } })
+                  }
+                />
               </div>
               {client.notes && (
                 <p className="mt-4 rounded-md bg-muted/50 p-3 text-sm text-foreground/80">
@@ -293,23 +344,29 @@ function ContactRow({
 }
 
 /**
- * Inline date editor used in the Overview card. Renders the formatted value
- * as compact text; clicking flips to a native <input type="date"> that calls
- * `onSave` on blur if the value actually changed. The local edit buffer
- * follows the "store-info-from-previous-renders" pattern so it stays in sync
- * with upstream updates without a useEffect.
+ * Inline editor used in the Overview card for any single-line field
+ * (industry, website, email, phone, contact name, contract dates, etc).
+ * Renders the value as compact text; clicking flips to a native <Input> of
+ * the requested type that calls `onSave` on blur if the value actually
+ * changed. The local edit buffer follows the "store-info-from-previous-
+ * renders" pattern so it stays in sync with upstream updates without a
+ * useEffect.
  */
-function DateField({
+function EditableField({
   label,
   value,
+  icon,
+  type = "text",
   onSave,
 }: {
   label: string
-  value: string | null
+  value: string | null | undefined
+  icon?: React.ReactNode
+  type?: "text" | "url" | "email" | "tel" | "date"
   onSave: (v: string | null) => void
 }) {
   const [editing, setEditing] = React.useState(false)
-  const [prev, setPrev] = React.useState(value)
+  const [prev, setPrev] = React.useState<string | null | undefined>(value)
   const [v, setV] = React.useState(value ?? "")
   if (prev !== value) {
     setPrev(value)
@@ -317,18 +374,20 @@ function DateField({
   }
   const commit = () => {
     setEditing(false)
-    const next = v || null
-    if (next !== value) onSave(next)
+    const trimmed = v.trim()
+    const next = trimmed === "" ? null : trimmed
+    if (next !== (value ?? null)) onSave(next)
   }
   return (
     <div className="flex items-start gap-2 text-sm">
+      {icon && <span className="mt-0.5 text-muted-foreground">{icon}</span>}
       <div className="min-w-0 flex-1">
         <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
           {label}
         </p>
         {editing ? (
           <Input
-            type="date"
+            type={type}
             autoFocus
             value={v}
             onChange={(e) => setV(e.target.value)}
@@ -346,7 +405,7 @@ function DateField({
           <button
             type="button"
             onClick={() => setEditing(true)}
-            className="-mx-1 truncate rounded px-1 text-left text-foreground hover:bg-muted/60"
+            className="-mx-1 block w-full truncate rounded px-1 text-left text-foreground hover:bg-muted/60"
           >
             {value ?? "—"}
           </button>
