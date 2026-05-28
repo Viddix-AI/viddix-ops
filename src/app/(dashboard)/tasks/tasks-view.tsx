@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { CheckSquare, ChevronRight, Clock, ExternalLink, Repeat, Search, X } from "lucide-react"
+import { CheckSquare, ChevronRight, Clock, ExternalLink, Plus, Repeat, Search, X } from "lucide-react"
 
 import { Input } from "@/components/ui/input"
 import { Pill, type PillTone } from "@/components/ui/pill"
@@ -28,6 +28,7 @@ import { useTasks, useUpdateTask } from "@/hooks/use-tasks"
 import { relativeDay } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import type { Profile, Tag, Task, TaskPriority } from "@/lib/types"
+import { AddTaskDialog } from "./add-task-dialog"
 import { TaskDetailSheet } from "./task-detail-sheet"
 
 const PRIORITIES: { value: TaskPriority; label: string }[] = [
@@ -37,14 +38,30 @@ const PRIORITIES: { value: TaskPriority; label: string }[] = [
   { value: "urgent", label: "Urgent" },
 ]
 
-type Group = "overdue" | "today" | "week" | "later"
+// Group-by axis chosen by the user. Each value maps to its own grouping
+// function further down; the rendered group labels are derived per-task.
+type GroupBy = "due" | "assignee" | "client" | "priority"
 
-const GROUP_LABELS: Record<Group, string> = {
+const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
+  { value: "due",      label: "Group by · Due date" },
+  { value: "assignee", label: "Group by · Assignee" },
+  { value: "client",   label: "Group by · Client" },
+  { value: "priority", label: "Group by · Priority" },
+]
+
+// Due-date buckets — kept as a distinct type from GroupBy because their
+// ordering matters (overdue is louder than later, urgent louder than low).
+type DueBucket = "overdue" | "today" | "week" | "later"
+
+const DUE_BUCKET_LABELS: Record<DueBucket, string> = {
   overdue: "Overdue",
   today: "Today",
   week: "This week",
   later: "Later",
 }
+
+const DUE_BUCKET_ORDER: DueBucket[] = ["overdue", "today", "week", "later"]
+const PRIORITY_ORDER: TaskPriority[] = ["urgent", "high", "medium", "low"]
 
 // Status filter has its own vocabulary beyond TaskStatus — "open" matches
 // any non-done, "overdue" cross-cuts status + due_date.
@@ -77,6 +94,7 @@ type Filters = {
   client: string
   lead: string
   tags: string[] // tag ids; OR-match
+  group: GroupBy
 }
 
 const EMPTY_FILTERS: Filters = {
@@ -87,11 +105,13 @@ const EMPTY_FILTERS: Filters = {
   client: "",
   lead: "",
   tags: [],
+  group: "due",
 }
 
 function filtersFromParams(params: URLSearchParams): Filters {
   const status = params.get("status") as StatusFilter | null
   const priority = params.get("priority") as TaskPriority | null
+  const group = params.get("group") as GroupBy | null
   const tagsRaw = params.get("tags")
   return {
     q:        params.get("q") ?? "",
@@ -101,6 +121,7 @@ function filtersFromParams(params: URLSearchParams): Filters {
     client:   params.get("client") ?? "",
     lead:     params.get("lead") ?? "",
     tags:     tagsRaw ? tagsRaw.split(",").filter(Boolean) : [],
+    group:    group && GROUP_BY_OPTIONS.some((g) => g.value === group) ? group : "due",
   }
 }
 
@@ -113,13 +134,14 @@ function filtersToParams(f: Filters): URLSearchParams {
   if (f.client)                       p.set("client", f.client)
   if (f.lead)                         p.set("lead", f.lead)
   if (f.tags.length > 0)              p.set("tags", f.tags.join(","))
+  if (f.group && f.group !== "due")   p.set("group", f.group)
   return p
 }
 
 function isEmpty(f: Filters): boolean {
   return (
     !f.q && f.status === "all" && !f.assignee && !f.priority &&
-    !f.client && !f.lead && f.tags.length === 0
+    !f.client && !f.lead && f.tags.length === 0 && f.group === "due"
   )
 }
 
@@ -227,6 +249,7 @@ export function TasksView() {
 
   const [activeTaskId, setActiveTaskId] = React.useState<string | null>(null)
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set())
+  const [addOpen, setAddOpen] = React.useState(false)
 
   function toggleExpand(id: string) {
     setExpanded((prev) => {
@@ -244,16 +267,19 @@ export function TasksView() {
     return { todayMs, weekEndMs: todayMs + 6 * 86_400_000 }
   }, [])
 
-  function groupOf(task: Task): Group {
-    if (!task.due_date) return "later"
-    const d = new Date(task.due_date)
-    d.setHours(0, 0, 0, 0)
-    const t = d.getTime()
-    if (t < todayMs && task.status !== "done") return "overdue"
-    if (t === todayMs) return "today"
-    if (t > todayMs && t <= weekEndMs) return "week"
-    return "later"
-  }
+  const dueBucketOf = React.useCallback(
+    (task: Task): DueBucket => {
+      if (!task.due_date) return "later"
+      const d = new Date(task.due_date)
+      d.setHours(0, 0, 0, 0)
+      const t = d.getTime()
+      if (t < todayMs && task.status !== "done") return "overdue"
+      if (t === todayMs) return "today"
+      if (t > todayMs && t <= weekEndMs) return "week"
+      return "later"
+    },
+    [todayMs, weekEndMs]
+  )
 
   // Filtering: subtasks (parent_id != null) are excluded from the root
   // listing — they render inline under their parent when expanded.
@@ -297,10 +323,78 @@ export function TasksView() {
     return true
   })
 
-  const groups: Record<Group, Task[]> = { overdue: [], today: [], week: [], later: [] }
-  for (const t of filtered) {
-    groups[groupOf(t)].push(t)
-  }
+  // Group `filtered` by the chosen axis. Output is a list of
+  // {key, label, tone, tasks} so the renderer doesn't need to know about each
+  // axis's semantics. Empty buckets are dropped before render.
+  type RenderedGroup = { key: string; label: string; tone?: "danger"; tasks: Task[] }
+  const renderedGroups: RenderedGroup[] = React.useMemo(() => {
+    if (filters.group === "due") {
+      const m: Record<DueBucket, Task[]> = { overdue: [], today: [], week: [], later: [] }
+      for (const t of filtered) m[dueBucketOf(t)].push(t)
+      return DUE_BUCKET_ORDER.filter((b) => m[b].length > 0).map((b) => ({
+        key: b,
+        label: DUE_BUCKET_LABELS[b],
+        tone: b === "overdue" ? ("danger" as const) : undefined,
+        tasks: m[b],
+      }))
+    }
+    if (filters.group === "priority") {
+      const m = new Map<TaskPriority, Task[]>()
+      for (const t of filtered) {
+        const arr = m.get(t.priority) ?? []
+        arr.push(t)
+        m.set(t.priority, arr)
+      }
+      return PRIORITY_ORDER.filter((p) => (m.get(p)?.length ?? 0) > 0).map((p) => ({
+        key: p,
+        label: `${p[0].toUpperCase()}${p.slice(1)} priority`,
+        tasks: m.get(p) ?? [],
+      }))
+    }
+    if (filters.group === "assignee") {
+      // One bucket per profile that has at least one task in the filtered set,
+      // plus a trailing "Unassigned" bucket if any rows have no assignees.
+      const m = new Map<string, Task[]>()
+      const unassigned: Task[] = []
+      for (const t of filtered) {
+        if (t.assignee_ids.length === 0) {
+          unassigned.push(t)
+          continue
+        }
+        // A task with multiple assignees shows up in each of their buckets.
+        for (const id of t.assignee_ids) {
+          const arr = m.get(id) ?? []
+          arr.push(t)
+          m.set(id, arr)
+        }
+      }
+      const named: RenderedGroup[] = profiles
+        .filter((p) => m.has(p.id))
+        .map((p) => ({ key: `a:${p.id}`, label: p.full_name, tasks: m.get(p.id) ?? [] }))
+      if (unassigned.length > 0) {
+        named.push({ key: "a:none", label: "Unassigned", tasks: unassigned })
+      }
+      return named
+    }
+    // "client"
+    const m = new Map<string, Task[]>()
+    const noClient: Task[] = []
+    for (const t of filtered) {
+      if (!t.client_id) noClient.push(t)
+      else {
+        const arr = m.get(t.client_id) ?? []
+        arr.push(t)
+        m.set(t.client_id, arr)
+      }
+    }
+    const named: RenderedGroup[] = (clients ?? [])
+      .filter((c) => m.has(c.id))
+      .map((c) => ({ key: `c:${c.id}`, label: c.name, tasks: m.get(c.id) ?? [] }))
+    if (noClient.length > 0) {
+      named.push({ key: "c:none", label: "No client", tasks: noClient })
+    }
+    return named
+  }, [filtered, filters.group, profiles, clients, dueBucketOf])
 
   function toggleDone(task: Task) {
     update.mutate({
@@ -318,6 +412,12 @@ export function TasksView() {
         eyebrow="HOLDING · TASKS"
         title="Tasks"
         description={`${openCount} open · ${tasks.length} total`}
+        actions={
+          <Button onClick={() => setAddOpen(true)}>
+            <Plus />
+            New task
+          </Button>
+        }
       />
 
       <div className="space-y-6 px-4 py-5 lg:px-6">
@@ -374,6 +474,12 @@ export function TasksView() {
                 ...leads.map((l) => ({ value: l.id, label: l.name })),
               ]}
             />
+            <FilterSelect
+              value={filters.group}
+              onChange={(v) => set("group", (v || "due") as GroupBy)}
+              placeholder="Group by"
+              options={GROUP_BY_OPTIONS.map((g) => ({ value: g.value, label: g.label }))}
+            />
             {!isEmpty(filters) && (
               <Button
                 variant="ghost"
@@ -414,23 +520,21 @@ export function TasksView() {
           )}
         </div>
 
-        {(["overdue", "today", "week", "later"] as Group[]).map((group) => {
-          const items = groups[group]
-          if (!items.length) return null
+        {renderedGroups.map((g) => {
           return (
-            <section key={group}>
+            <section key={g.key}>
               <h3
                 className={cn(
                   "mb-2 font-mono text-[11px] uppercase tracking-[0.18em]",
-                  group === "overdue" ? "text-destructive" : "text-text-tertiary"
+                  g.tone === "danger" ? "text-destructive" : "text-text-tertiary"
                 )}
               >
-                {GROUP_LABELS[group]} · {items.length}
+                {g.label} · {g.tasks.length}
               </h3>
               <ul className="divide-y divide-border-subtle rounded-[var(--radius-lg)] border border-border-subtle bg-card">
-                {items.map((task) => (
+                {g.tasks.map((task) => (
                   <TaskRow
-                    key={task.id}
+                    key={`${g.key}:${task.id}`}
                     task={task}
                     profiles={profiles}
                     leads={leads}
@@ -464,6 +568,7 @@ export function TasksView() {
         open={!!activeTaskId}
         onOpenChange={(o) => !o && setActiveTaskId(null)}
       />
+      <AddTaskDialog open={addOpen} onOpenChange={setAddOpen} />
     </>
   )
 }
